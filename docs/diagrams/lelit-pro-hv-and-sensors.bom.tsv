@@ -1,0 +1,11 @@
+Id	Description	Qty	Unit	Designators
+1	Cable, 1 x 18 AWG	0.5	m	PUMP_LIVE, PUMP_NEUT
+2	Cable, 2 x 18 AWG	0.3	m	LINE_IN
+3	Cable, 3 x 22 AWG	0.4	m	SENSOR
+4	Connector, 6.35mm Spade, female, 2 pins	1		PUMP
+5	Connector, Existing machine wiring, downstream of main switch, 2 pins	1		MACHINE_MAINS
+6	Connector, Pressure transducer, 0-1.6 MPa, 0.5-4.5 V ratiometric, 3 pins	1		TRANSDUCER
+7	Connector, Terminal block, GaggiMate Pro Rev 1.1, DANGER HV, 4 pins	1		J2_HV
+8	Connector, Terminal block, GaggiMate Pro, 4 pos, 4 pins	1		PRESSURE_PORT
+9	PTFE tape / sealant for the pressure tap	1		
+10	Tee fitting for transducer at 4-way cross 2200110	1		

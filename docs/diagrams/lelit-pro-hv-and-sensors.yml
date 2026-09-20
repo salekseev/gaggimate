@@ -1,0 +1,84 @@
+metadata:
+  title: Lelit Elizabeth - GaggiMate Pro HV rewire and pressure tap
+  description: Pump moved from Gicar FA7 to the Pro dimmed P terminal. Transducer on the Pro pressure port. Gicar FA7 is abandoned - disconnect its tab, cut back, insulate, and never assert SR2 bit 4.
+
+  templates:
+    - &hv
+      gauge: 18 AWG
+    - &lv
+      gauge: 22 AWG
+    - &spade
+      type: 6.35mm Spade
+      subtype: female
+
+connectors:
+  MACHINE_MAINS:
+    type: Existing machine wiring
+    subtype: downstream of main switch
+    pinlabels: [LINE, NEUTRAL]
+    notes: Permanent mains, upstream of Gicar FA7. The dimmer derives zero-cross from its input side, so this must NOT come off a switched contact.
+
+  J2_HV:
+    type: Terminal block
+    subtype: GaggiMate Pro Rev 1.1, DANGER HV
+    pinlabels: [P, V, N, L]
+    notes: P is the dimmed triac output driven by PSM. V (valve relay) unused on this build - the 3-way stays on Gicar FA8.
+
+  PUMP:
+    <<: *spade
+    pinlabels: [LIVE, NEUTRAL]
+    notes: Lelit 4000040 silent vibration pump, 120 V. NEUTRAL is the thermal-fuse leg - leave it alone. Its LIVE no longer comes from Gicar FA7; the triac is now the only switch in this circuit.
+
+  PRESSURE_PORT:
+    type: Terminal block
+    subtype: GaggiMate Pro, 4 pos
+    pinlabels: [GND, X, ANALOG_IN, +5V]
+    notes: Feeds the onboard ADS1115 on GPIO41/42. X is unused.
+
+  TRANSDUCER:
+    type: Pressure transducer
+    subtype: 0-1.6 MPa, 0.5-4.5 V ratiometric
+    pinlabels: [+5V, SIGNAL, GND]
+    notes: Tap at the 4-way cross fitting 2200110, which already feeds the mechanical manometer.
+
+cables:
+  LINE_IN:
+    <<: *hv
+    colors: [BN, BU]
+    length: 0.3
+  PUMP_LIVE:
+    <<: *hv
+    colors: [BN]
+    length: 0.25
+  PUMP_NEUT:
+    <<: *hv
+    colors: [BU]
+    length: 0.25
+  SENSOR:
+    <<: *lv
+    colors: [RD, YE, BK]
+    length: 0.4
+
+connections:
+  -
+    - MACHINE_MAINS: [1, 2]
+    - LINE_IN: [1, 2]
+    - J2_HV: [4, 3]
+  -
+    - J2_HV: [1]
+    - PUMP_LIVE: [1]
+    - PUMP: [1]
+  -
+    - J2_HV: [3]
+    - PUMP_NEUT: [1]
+    - PUMP: [2]
+  -
+    - TRANSDUCER: [1, 2, 3]
+    - SENSOR: [1, 2, 3]
+    - PRESSURE_PORT: [4, 3, 1]
+
+additional_bom_items:
+  - description: Tee fitting for transducer at 4-way cross 2200110
+    qty: 1
+  - description: PTFE tape / sealant for the pressure tap
+    qty: 1
