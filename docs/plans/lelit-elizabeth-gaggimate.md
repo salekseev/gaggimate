@@ -201,8 +201,8 @@ the GPIO matrix allows any pins — and leave `Serial` on USB CDC, which
 The alternative is expansion-header **GPIO12 + GPIO13**, both entirely unused by
 firmware (`ext4Pin` / `ext5Pin` appear nowhere outside `ControllerConfig.h`), on a
 header that has a real +3.3V pin. It costs you the addon slot, and its pin order is
-only verified against the Standard board. Reasonable if you want UART0 free for a
-console during bring-up.
+only verified against the Standard board. That is the route the expansion board below
+takes, and it is also reasonable for a pigtail if you want UART0 free during bring-up.
 
 #### Assembly
 
@@ -248,6 +248,57 @@ Two things this changes:
 
 A proper Mod II crimper gives the best result; for six contacts, hand-crimping and
 reflowing a little solder into the wire barrel is an acceptable substitute.
+
+### Productionised bridge: an expansion board
+
+The pigtail above is the bring-up path — it needs no fab cycle and works with the $2
+connector. The production form is an **expansion board**, because GaggiMate already has
+a documented addon pattern and this fits it. See
+[`pcb/expansion-template/README.md`](../../pcb/expansion-template/README.md) for the
+pattern itself; what follows is the Lelit-specific design.
+
+**Why it is better than the pigtail**, once the bit map is settled and you want this
+permanent:
+
+- The expansion header has **+3V3 on pin 3**, so the RX level shift becomes a proper
+  74LVC1G125 buffer instead of a resistor divider. The UART port has no 3V3 pin, which
+  is the only reason the pigtail uses a divider at all.
+- It **frees UART0**. GPIO12 and GPIO13 are not `U0TXD`, so the serial console stays
+  available for bring-up *and* the ROM-bootloader-banner-into-the-Gicar issue disappears
+  outright rather than being argued away.
+- The board is **mechanically retained** by the template's M2.5 hole, rather than a
+  cable hanging off a JST header inside a vibrating machine.
+- The CN10 connector moves on-board as a **TE 280372-1** male AMPMODU Mod II header —
+  Open LCC's exact part — so either the stock Lelit cable or the 280360 pigtail plugs
+  straight in, and the non-polarised reversal hazard goes away on the board side.
+
+**Design:**
+
+| Item | Choice |
+|---|---|
+| Form factor | Fork `pcb/expansion-template`: 28.16 × 31.00 mm, 2 layer, M2.5 hole |
+| I²C address | `0x22` (first free), set on JP1/JP2/JP3, purely so `detectAddon()` identifies the board |
+| UART to Gicar | **GPIO13 = TX, GPIO12 = RX** — direct MCU pins on the header, mapped via the GPIO matrix. Both are unused by firmware (`ext4Pin`/`ext5Pin`) |
+| RX level shift | 74LVC1G125 powered from header +3V3, as Open LCC does |
+| TX | 220 Ω series plus a 3.6 V TVS clamp |
+| CN10 | TE 280372-1, 6-pos male, on-board |
+| TCA9555 `EXT_*` | Spare. Candidates: mirroring panel LEDs, or nothing — the expander is there for identity, not because the bridge needs 16 GPIOs |
+
+**Two things to settle before spinning it:**
+
+1. **`EN` is not driven by firmware.** Built to the template verbatim, the TCA9555 never
+   grounds and never enumerates. Since we are writing a controller backend anyway, the
+   right fix is to assert `ext1Pin` before probing — see the caveat in the template
+   README — and that is worth contributing upstream rather than working around on the
+   board.
+2. **The header pinout is verified on the Standard schematic, not the Pro.** The Pro's
+   J6 is unlabelled in the published pinout image. `ControllerConfig` assigns the same
+   `ext1..5` = GPIO 1, 2, 8, 12, 13 across every board variant, which is good evidence,
+   but meter it before committing a layout.
+
+Note the pigtail and the board are not mutually exclusive: the same firmware serves
+both, since the only difference is which two GPIOs `Serial1` is bound to. Put the pin
+numbers in `GM_PRO_LELIT` (`lccRxPin` / `lccTxPin`) and switching is a config change.
 
 ### HV rewire and pressure tap
 
