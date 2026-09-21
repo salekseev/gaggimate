@@ -1,8 +1,41 @@
-# Lelit LCC ↔ Gicar 8.5.04 protocol reference
+# Lelit LCC ↔ Gicar control-board protocol reference
 
 Reference for the serial bus between a Lelit machine's front display board (the
-"LCC") and its Gicar 8.5.04 power card. Written for the **Elizabeth PL92T**, whose
-power card is Lelit part **9600077** and whose stock display board is **9600148**.
+"LCC") and its Gicar power card. Written for the **Elizabeth PL92T**, whose power card
+is Lelit part **9600077** and whose stock display board is **9600148**.
+
+**On part numbers.** The 9600077 board is marked **`GICAR with LELIT · cod.
+9.3.01.30G00 · (9600077 REV00)`** — confirmed from product photographs. The upstream
+protocol documentation calls this class of board the "Gicar 8.5.04", which appears to
+be a platform designation rather than the Lelit order code; this document uses
+**9.3.01.30G00** where it means the physical board and reserves "8.5.04" for citing
+those upstream repos. For context, the Bianca LCC is `9.3.01.32G00` — an adjacent part
+number in the same family — while a Rancilio Silvia Pro board is `9.5.33.65G00`, a
+different family entirely.
+
+### What the product photographs show
+
+Worth recording, because it is cheaper than opening a machine:
+
+- A **fully potted module**, not a bare PCB. HV outputs are **Faston blade tabs** in
+  moulded channels; the LV face carries small keyed 2-pin housings (a white and a dark
+  red one, plugged in) plus **multi-pin fields of bare square posts in moulded
+  recesses**.
+- The HV block is silkscreened `FA1`, `FA4`, `FA7`, `FA8`, `FA9`, `FA10`. **`FA1` and
+  `FA4` are not mapped by any shift-register documentation below**, and the front label
+  associates the outputs with `POMPA`, `EV CAFFE'`, `COM. CARICHI`, `EV.ACQUA` and
+  `EV.CARICO`. The board is a `TERMOPID CLED MACININO` — *macinino* is grinder — so
+  there is more HV capability here than this protocol describes.
+- The labels confirm the machine is dual-boiler from the board's side: one face carries
+  `STEMP. CALD. CAFFE'` and the coffee-boiler SSR connection, another carries
+  `STEMP. CALD. VAPORE`, `LIVELLO CALDAIA VAPORE`, `COLLEGAMENTO SSR RES. CALDAIA
+  VAPORE` and `ILLUMINAZIONE MANOMETRO` — the last matching SR2 bit 0 in the bit map
+  below.
+- **They do not settle whether CN10 is polarized.** The 6-way display connector is not
+  identifiable at the available angles, and a symmetric moulded pocket around a single
+  row of posts would not polarize a mating housing anyway — that needs an asymmetric rib
+  or notch. Treat it as a look-at-the-connector check; see the pigtail section of
+  [lelit-elizabeth-gaggimate.md](lelit-elizabeth-gaggimate.md).
 
 This document is the wire-format reference. For the build that uses it, see
 [lelit-elizabeth-gaggimate.md](lelit-elizabeth-gaggimate.md).
@@ -34,7 +67,7 @@ everywhere else, settle it on the bench before wiring a mains solenoid to it.
 
 ## Architecture
 
-The Gicar is not a controller. It is a **dumb I/O expander**: an STM8S003F3P6 plus
+The control board is not a controller. It is a **dumb I/O expander**: an STM8S003F3P6 plus
 two daisy-chained STPIC6C595 open-drain power shift registers, an ADC front end for
 the thermistors and level probe, and the mains switching. Every decision — PID,
 pre-infusion timing, autofill, UI — lives in the LCC. Replacing the LCC means taking
@@ -45,7 +78,7 @@ flowchart LR
   subgraph LCC["LCC display board (the brain)"]
     UI["UI + PID + pre-infusion + autofill"]
   end
-  subgraph GICAR["Gicar 8.5.04 (I/O expander)"]
+  subgraph GICAR["Gicar 9.3.01.30G00 (I/O expander)"]
     SR["2x STPIC6C595<br/>open-drain shift registers"]
     ADC["STM8 ADC front end"]
   end
@@ -234,7 +267,7 @@ for heater duty over this bus: 25 steps, or 4 %.
 sequenceDiagram
     autonumber
     participant M as LCC (master)
-    participant G as Gicar 8.5.04
+    participant G as Gicar 9.3.01.30G00
     loop every 100 ms
         M->>G: 0x80 ii jj bb zz  (5 bytes, actuator bitmap)
         G-->>M: 0x81 ... zz      (18 bytes, sensors + buttons)

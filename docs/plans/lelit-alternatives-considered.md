@@ -104,7 +104,7 @@ LCC-replacement architecture itself is sound — it is the one this plan adopts.
 ## C. All-Purpose Espresso Controller — replaces the Gicar, cannot dim, not buildable
 
 APEC is a two-board set (RP2040 + ESP32-S3-WROOM-1 logic board, plus a mains "HV"
-companion) deliberately built to the **same form factor as a Gicar 8.5.04.91** so it
+companion) deliberately built to the **same form factor as a Gicar control board.91** so it
 drops into the stock enclosure. Form factor only — not electrical or protocol
 compatibility.
 

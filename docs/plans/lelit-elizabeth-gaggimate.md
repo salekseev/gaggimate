@@ -46,7 +46,7 @@ wiring and relays, p.7–8 boilers, p.10 hydraulics, p.15 pump):
 
 | Part | Code | Role |
 |---|---|---|
-| POWER CARD PL92T 100-240Vac | 9600077 | Gicar 8.5.04 — mains switching + sensor front end |
+| POWER CARD PL92T 100-240Vac | 9600077 | Gicar **9.3.01.30G00** — mains switching + sensor front end. Potted module; HV on Faston tabs |
 | DISPLAY LCC DUALBOILER | 9600148 | The brain: UI, PID, pre-infusion logic |
 | FLAT CABLE DISPLAY LCC 6WAYS | 9600042 | The only link between them (CN10, 400 mm) |
 | TEMPERATURE PROBE ×2 | 9600092 | 50 kΩ NTC, one per boiler |
@@ -241,15 +241,33 @@ Two things this changes:
 - **Use 26 AWG, not the OEM cable's 28 AWG.** Those contacts are specified 22–26 AWG
   and 28 AWG makes an unreliable crimp. At roughly 2 mA the gauge is electrically
   irrelevant here, so this costs nothing.
-- **280360 is non-polarized, and that is a hazard on this bus.** A 6-way housing on an
-  unshrouded header can be fitted backwards, mapping pin 1 to pin 6. Since the pigtail
-  populates only pins 2, 3 and 4, a reversed plug puts the **GND wire onto CN10 pin 3 —
-  the Gicar's 5 V push-pull TX output** — shorting an STM8 output pin to ground.
-  Open LCC does not have this exposure because 280372-1 is 3-wall shrouded from the
-  board side; you get no such protection plugging onto the Gicar. Mitigate by marking
-  pin 1 on the housing, leaving the three unused cavities empty as a visual cue, and
-  **continuity-checking pin 4 to GND before the first plug-in** (the listen-only step
-  below is the natural moment).
+- **Polarization comes from the header, not from this housing — so check what CN10 is.**
+  TE's attribute table for 280360 lists no polarization field, only "Mating Retention:
+  Detent Latching", and its customer drawing shows a plain rectangular profile with no
+  keying rib. TE's series documentation puts the keying on the other half: *"The
+  housings of these AMPMODU Mod II shrouded headers are polarized to prevent mismating,
+  and a detent window in the housing allows a secure positive locking connection to be
+  made with the mating receptacle connector."* The evenly spaced features on the
+  housing's underside are one per position, and anything repeated identically at every
+  position is symmetric under 180° rotation, so they are contact cavities and
+  retention-tab windows rather than keys.
+
+  So the question is what the Gicar presents:
+
+  - **Shrouded Mod II header** (280372-x / 280373-x family) — cannot be reversed. The
+    shroud polarizes it and the detent latches. Nothing further to do.
+  - **Bare 2.54 mm pin header** — a 180° rotation is physically possible. Since the
+    pigtail populates only pins 2, 3 and 4, a reversed plug puts the **GND wire onto
+    CN10 pin 3, the Gicar's 5 V push-pull TX output**, shorting an STM8 output pin to
+    ground. Mark pin 1, leave the three unused cavities empty as a visual cue, and
+    **continuity-check pin 4 to GND before the first plug-in** (the listen-only step
+    below is the natural moment).
+
+  Shrouded is the likely answer — Open LCC deliberately specifies the shrouded 280372-1
+  for its own board side, noting a plain pin header "can" be used "but this is highly
+  recommended", and a production appliance whose display cable plugs in backwards would
+  be an odd choice. Confirm it by looking at the connector rather than taking either
+  answer on trust.
 
 A proper Mod II crimper gives the best result; for six contacts, hand-crimping and
 reflowing a little solder into the wire barrel is an acceptable substitute.
@@ -608,8 +626,8 @@ to be argued, not assumed.
 | Machine | Board | Role |
 |---|---|---|
 | Rancilio Silvia Pro | Gicar **9.5.33.65G00** (Rancilio 34070325) | one self-contained "Electronic Board 100-240Vac" |
-| Lelit Bianca / Elizabeth | Gicar **9.3.01.32G00** — the LCC | the brain: display, buttons, PID |
-| Lelit Bianca / Elizabeth | Gicar **8.5.04** — the control board | dumb shift-register I/O expander |
+| Lelit Bianca / Elizabeth | Gicar **9.3.01.32G00** — the LCC | the brain: display, buttons, PID. Adjacent part number, same family |
+| Lelit Bianca / Elizabeth | Gicar **9.3.01.30G00** — the control board | dumb shift-register I/O expander. Marked on the 9600077; "8.5.04" is what the protocol repos call this class |
 
 On an LCC machine the intelligence is **split**, so replacing the brain and keeping the
 I/O expander is a far smaller intervention than replacing a self-contained controller.

@@ -1,6 +1,6 @@
 metadata:
   title: Lelit Elizabeth - CN10 signal pigtail
-  description: Gicar 8.5.04 power card 9600077 to GaggiMate Pro Rev 1.1 UART port J4
+  description: Gicar 9.3.01.30G00 power card 9600077 to GaggiMate Pro Rev 1.1 UART port J4
 
   template:
     name: din-6771
@@ -18,7 +18,7 @@ connectors:
     type: TE AMPMODU Mod II 280360
     subtype: female receptacle, 6 pos
     pinlabels: [+12V, TX_TO_GICAR, RX_FROM_GICAR, GND, 3V3_OLED, 3V3_MCU]
-    notes: NON-POLARIZED - mark pin 1 and continuity-check before the first plug-in. Reversed, GND lands on the Gicar 5 V TX output. Pins 1, 5, 6 unpopulated.
+    notes: Polarization comes from the header, not this housing - check whether CN10 is shrouded. If it is a bare pin header, mark pin 1 and continuity-check before the first plug-in. Pins 1, 5, 6 unpopulated.
 
   DIVIDER:
     type: Divider network
