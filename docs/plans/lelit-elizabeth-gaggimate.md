@@ -36,6 +36,7 @@ wiring and relays, p.7–8 boilers, p.10 hydraulics, p.15 pump):
 | 4WAY CROSS FITTING | 2200110 | Transducer tap point — already feeds the manometer |
 | Manometer | 3700006/32/34 | Mechanical gauge only; no electronic pressure sensor |
 | OPV | MC931 | Adjustable; sets brew pressure today |
+| **Machine nameplate** | — | **1400 W, 15 A** at 120 V — *below the element sum*, so the stock controller alternates them |
 | Safety thermostats | MC032 / MC521 | 165 °C manual-rearm. **Leave these alone.** |
 | Safety valve | 9700043 | 5.5 bar, service boiler. **Leave alone.** |
 | Anti-vacuum valve | 9700052 | Service boiler. **Leave alone.** |
@@ -45,8 +46,9 @@ The brew/service attribution comes from which fittings share each page: p.7 carr
 parts), p.8 the brass diffuser, LELIT58 group gasket and boiler upper-part kit (the brew
 group). It is consistent with CN9 driving brew and CN7 service across all three docs.
 **Confirm it against your own machine before wiring** — published Elizabeth specs are
-often quoted with a larger service boiler than 600 ml, and the interlock argument below
-rests on these two numbers.
+often quoted with a larger service boiler than 600 ml, and retailer listings give the
+brew element as 1200 W where the parts diagram says 1100 W. The interlock argument below
+rests on the element sum exceeding the nameplate, which holds either way.
 
 No flowmeter anywhere. **Both elements together exceed a 120 V / 15 A branch circuit, so
 they can never run at once.** That is why the interlock below is a safety requirement,
@@ -164,24 +166,69 @@ switches and SSR control onto the I²C expander.
 
 These follow from the machine, not from any particular board.
 
-### Both elements can never run together, and nothing backstops that
+### Both elements can never run together — the machine is rated on that assumption
 
-1000 W + 1100 W at 120 V is **17.5 A — 117 % of a 15 A breaker**. A UL 489 breaker is
-not required to trip promptly at 1.17×; it may carry that for an hour or indefinitely.
-And the 165 °C thermostats are **per-boiler thermal** cutouts: with both boilers sitting
-at their normal temperatures, neither opens. So the failure is not a trip and not a
-thermostat — it is the machine's inlet wiring, main switch and cord carrying a sustained
-overload they were never sized for.
+This is the single most important constraint on this machine, and it is stronger than
+"you might trip a breaker".
 
-**There is no electrical backstop. The interlock is the only protection.** Consequences
-for whatever drives the elements:
+| | Elements | Machine nameplate |
+|---|---|---|
+| Elizabeth PL92T-120 | 1000 W steam + 1100–1200 W brew | **1400 W**, 15 A |
+| Silvia Pro X, 120 V | 850 W steam + brew | ~1000 W |
 
-- Make "both" structurally unrepresentable — the two heaters resolve through one arbiter
-  that can only return a single active-boiler value — rather than a runtime `if`.
-- Assert on the **actual output state** immediately before it is applied, not on the
-  arbiter's inputs.
-- If the output path has a concurrency story (a shared cache, multiple writer tasks),
-  state it: one writer, everyone else posts requests.
+(The parts diagram gives the brew element as 1100 W; retailer specifications say 1200 W.
+Either way the point holds.)
+
+The element sum is roughly **2200 W**, far above the **1400 W** nameplate. That is only
+arithmetically possible if **the stock controller never runs both elements at full
+simultaneously** — so Lelit already alternates them, and the same pattern appears on the
+Silvia Pro X, whose 120 V nameplate is below its steam element plus anything. The
+appliance is rated, listed and certified on that assumption.
+
+So running both concurrently is not merely a nuisance trip. 2200 W at 120 V is
+**18.3 A — 122 % of a 15 A circuit**, and a UL 489 breaker is not required to trip
+promptly at 1.22×; it may carry that for an hour or longer. Meanwhile the 165 °C
+thermostats are **per-boiler thermal** cutouts, and with both boilers at their normal
+temperatures neither opens. The parts actually overloaded are the machine's cord, main
+switch and internal loom — none of which were sized for it, because the manufacturer
+never intended both elements to be on at once.
+
+**There is no electrical backstop. The interlock is the only protection.**
+
+> ⚠️ **At 230 V this problem does not exist.** 2200 W is 9.6 A, comfortably inside a
+> 16 A circuit. So dual-boiler firmware developed and tested on 230 V hardware can run
+> both elements concurrently, behave perfectly on the bench, and exceed the nameplate on
+> every 120 V machine. Anyone implementing dual-boiler support needs to know that the
+> interlock is a **120 V-market requirement that their own bench may not reveal.**
+
+### Firmware state today: the interlock does not exist, and neither does dual boiler
+
+Checked against the tree, because this is worth knowing precisely rather than assuming:
+
+- **One `Heater` instance only** — `GaggiMateController.cpp` constructs a single
+  `Heater` and holds one `Heater *heater`. There is no second boiler controller.
+- **`ALT_RELAY_STEAM_BOILER` is a dead constant.** It is defined in
+  `src/display/core/constants.h` and referenced nowhere else; `Controller.cpp` and
+  `DefaultUI.cpp` only ever test `ALT_RELAY_GRIND`. Selecting it would drive nothing,
+  and the option is `disabled` in `MachineTab.jsx` regardless.
+- **No power arbitration anywhere.** No interlock, no total-power or current limit, no
+  mutual exclusion between outputs.
+
+So there is nothing broken to fix — the feature is absent. The consequence is that **the
+interlock has to be designed in alongside dual-boiler support, not bolted on after.**
+Requirements:
+
+- **It belongs on the controller**, at the point heater outputs are applied, below both
+  PID loops. Not in the display: a dropped link must not be able to leave both elements
+  energised.
+- **Make "both" structurally unrepresentable** — the two loops resolve through one
+  arbiter that can only return a single active boiler — rather than a runtime `if` that
+  a future caller can bypass.
+- **Assert on the applied output state**, not on the arbiter's inputs.
+- **Make it configurable per machine**, from element wattages and supply voltage or
+  simply an alternate-only flag. A 230 V machine would lose steam recovery speed for no
+  benefit, so a blanket always-on default is the wrong trade — but the safe default for
+  an unknown machine is to alternate.
 
 ### Arbiter starvation causes overshoot
 
@@ -284,6 +331,10 @@ single procedure — do not run a second one in parallel.
    controller reset? Decides whether the boot window above applies.
 7. **Connector pinouts** — the Molex Micro-Fit 3.0 2×12 and Hirose DF63 6P maps, for
    documenting the install.
+8. **Does the dual-boiler firmware alternate the elements?** Not a hardware question, but
+   the one with the highest consequence, and the reason to ask early: at 230 V both
+   elements fit on one circuit, so a 230 V bench will not reveal a missing interlock. See
+   the constraint section above.
 
 ## Related documents
 
