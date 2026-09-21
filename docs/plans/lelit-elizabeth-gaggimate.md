@@ -29,7 +29,12 @@ Wire format in [lelit-lcc-protocol.md](lelit-lcc-protocol.md).
    LEDs stay on the Gicar.
 3. **Boiler temperatures come from the Gicar's own NTCs** over CN10 — no plumbing
    changes, both boilers for free.
-4. **Full second PID for the service boiler, with a hard never-both interlock.**
+4. **Service boiler: adopt upstream's dual-boiler support rather than writing a second
+   one.** An official dual-boiler expansion board is in progress (primary target the
+   Rancilio Silvia Pro X) and the firmware will switch to dual-boiler when it detects
+   that board. This plan consumes that work and contributes the LCC-specific backend
+   under it. The never-both interlock still has to be enforced locally, because the
+   Gicar has no backstop — see the failure modes.
 
 One mains wire moved, one tee fitting added. Reverts to stock by unplugging CN10 and
 putting the pump wire back on FA7. **Keep the stock LCC board.**
@@ -548,39 +553,127 @@ the 1 bar / 9 bar web flow calibration, pressure traces in the shot graph, and
 gravimetric stop over BLE — all unmodified upstream code. Plus brew-boiler PID via
 CN9, all three solenoids, and the panel buttons and LEDs.
 
-## Stage 2 — service boiler, PID and interlock
+## Stage 2 — consume upstream's dual-boiler work, don't duplicate it
 
-The dual-boiler gap sits on both sides of the BLE link. Display side: `Controller.cpp`
-hardcodes `boiler.index = 0`, `GaggiMateClient.cpp` only ever reads `boilers[0]`, and
-the `Steam Boiler` option is `disabled` in `MachineTab.jsx` under a field labelled
-**"Alt Relay / SSR2 Function"** — itself the clearest evidence that SSR2 and
-`ALT_RELAY_STEAM_BOILER` were meant for each other. Controller side:
-`GaggiMateServer.cpp` hardcodes `boilers_count = 1` ("schema allows more"), and
+**This stage changed.** The maintainer is building an official dual-boiler expansion
+board, primary target the **Rancilio Silvia Pro X**, and has said the firmware "will
+detect it and swap functionalities to dualboiler". That covers exactly what an earlier
+draft of this plan proposed to write: the second `Heater`, the power-sharing arbiter,
+`boiler.index` plumbing, `SensorData.boilers[1]`, and the `MachineTab` option. Writing
+a second implementation of that would collide with upstream and be rejected on sight,
+correctly.
+
+So Stage 2 is now: **be the second consumer of their abstraction, not a rival
+implementation of it.**
+
+What that means concretely:
+
+- **Don't write the arbiter or the second-boiler plumbing.** Wait for it and adopt it.
+  The one thing worth asking for is that the abstraction stay **backend-agnostic** —
+  keyed on boiler index, not on "the board that has two SSRs" — so a boiler whose
+  output is a bus bit rather than a GPIO is expressible.
+- **Do offer the Elizabeth as a validation case.** A second, structurally different
+  consumer is how anyone finds out whether an abstraction actually generalises. Their
+  board drives SSRs directly at full resolution; this machine drives them as bits in a
+  100 ms frame with a 25-slot window. If their interface accommodates both, it is a good
+  interface. That is a contribution to them, not a favour asked of them.
+- **Do build the parts nobody else is building**: `LccTemperatureSensor(index 1)` on
+  SR2 bit 1 (CN7), and service-boiler autofill from the capacitive level triplet →
+  FA9 plus the pump, gated on tank-not-empty and deprioritized while brewing. Note the
+  pump is GaggiMate's own dimmed output now, so autofill drives `PumpControl` POWER
+  rather than a Gicar bit, which also means a bus bail must stop it (see failure modes).
+  A plugin alongside `BoilerFillPlugin` is the natural home.
+
+For reference, the gap as it stands today sits on both sides of the BLE link. Display:
+`Controller.cpp` hardcodes `boiler.index = 0`, `GaggiMateClient.cpp` reads only
+`boilers[0]`, and the `Steam Boiler` option is `disabled` in `MachineTab.jsx` under a
+field labelled **"Alt Relay / SSR2 Function"** — itself the clearest evidence that SSR2
+and `ALT_RELAY_STEAM_BOILER` were meant for each other. Controller:
+`GaggiMateServer.cpp` hardcodes `boilers_count = 1` ("schema allows more") and
 `GaggiMateController.cpp` **rejects `BoilerControl.index != 0` outright**. The proto
 schema is already multi-boiler by index (`max_count:4`), so the wire format needs
-nothing.
+nothing — which is why this is an endpoint problem and a good one to solve once,
+upstream.
 
-**Controller:**
+## Upstreaming
 
-- Second `Heater` on `LccTemperatureSensor(index 1)` → SR2 bit 1 (CN7).
-- **Power-sharing arbiter** above both heaters and below invariant 1: brew has
-  priority, service takes the remaining tick slots, brew takes 100 % while brewing.
-  `open-lcc` gives brew roughly 75 % when idle.
-- Populate `SensorData.boilers` with **both** readings, and honour
-  `BoilerControl.index`.
-- **Service-boiler autofill**: level triplet → threshold (`open-lcc` uses `> 256`;
-  roughly 128 full, 600+ empty) → FA9 water solenoid plus pump, gated on
-  tank-not-empty and deprioritized while brewing. Note the pump is now GaggiMate's own
-  dimmed output, so autofill drives `PumpControl` POWER rather than a Gicar bit. A
-  plugin alongside `BoilerFillPlugin` is the natural home.
+This plan is only worth executing if it lands as something the project wants. The two
+paths are **not rivals** — they address different machine architectures — but that has
+to be argued, not assumed.
 
-**Display:**
+### Why these are different problems
 
-- Stop hardcoding `boiler.index = 0`; emit both.
-- Read `boilers[1]` as well as `boilers[0]`.
-- Service-boiler setpoint and enable in `Settings`, alongside `targetSteamTemp`.
-- Enable the `Steam Boiler` option in `MachineTab` once the backend lands.
-- Surface the second temperature in the UI, web status and shot log.
+"Gicar" is a manufacturer, not a model, and the part numbers differ by family:
+
+| Machine | Board | Role |
+|---|---|---|
+| Rancilio Silvia Pro | Gicar **9.5.33.65G00** (Rancilio 34070325) | one self-contained "Electronic Board 100-240Vac" |
+| Lelit Bianca / Elizabeth | Gicar **9.3.01.32G00** — the LCC | the brain: display, buttons, PID |
+| Lelit Bianca / Elizabeth | Gicar **8.5.04** — the control board | dumb shift-register I/O expander |
+
+On an LCC machine the intelligence is **split**, so replacing the brain and keeping the
+I/O expander is a far smaller intervention than replacing a self-contained controller.
+Worth confirming with the maintainer rather than inferring from part numbers, but it is
+the reason a retained-Gicar path is complementary rather than duplicative.
+
+### Installation effort, which is the actual argument
+
+| | Retain the Gicar (this plan) | Replace it |
+|---|---|---|
+| Connectors to terminate | **one 6-way AMPMODU II** | ~15 circuits: pump, FA8/FA9/FA10, 2 heater drives, 2 NTCs, capacitive level probe, tank reed, 3 buttons, 3 LEDs, manometer lamp |
+| Connector families | one | three — AMPMODU II 2.54 Gicar-side, Faston/screw on HV, Molex Micro-Fit 3.0 2×12 + Hirose DF63 6P board-side |
+| Crimp tooling | one | Micro-Fit and DF63 each want their own |
+| Mains work | one wire to `P` | all of it |
+| Reversible | unplug CN10, restore the pump wire | no |
+
+The connector point is an **alignment** argument, not a conflict: a Gicar-replacement
+board already needs AMPMODU II 2.54 to mate Gicar-side harnesses, and the LCC bus is
+the same family (280360 + 182206-2). An LCC bridge needs no tooling beyond what that
+board already requires.
+
+**Open question for the maintainer:** the Elizabeth's 85 mm level probe is
+**capacitive**, which needs a dedicated front end — APEC uses an FDC1004 for this job.
+If a replacement board doesn't have one, an LCC machine loses autofill unless the probe
+is swapped too.
+
+### Contribution order
+
+Smallest and least controversial first, so nothing depends on the argument being won:
+
+1. **`Heater` takes an output interface instead of a raw pin.** Generic, no behaviour
+   change for existing boards, and needed by any backend where the heater is not a
+   direct GPIO — plausibly including the dual-boiler board, if SSR2 sits behind an
+   expander. Lands independently of everything else here.
+2. **Fix the `EN` gap in `detectAddon()`** and rename `GearpumpAddon`'s dead
+   `interrupt` parameter to `enable`. A board built to `pcb/expansion-template`
+   verbatim currently cannot enumerate; see
+   [`pcb/expansion-template/README.md`](../../pcb/expansion-template/README.md). Pure
+   bug fix, helps every future addon.
+3. **Ask that the dual-boiler abstraction stay index-keyed and backend-agnostic**, and
+   offer this machine as its second consumer.
+4. **Ship the LCC backend as an addon** at a free I²C address — purely additive, no
+   shared code to regress, no impact on the Gicar-replacement path.
+5. **Keep per-machine bit maps in a table, not in logic.** This is the thing that should
+   worry a maintainer about "LCC support", because it is N machines with a shared frame
+   and different bit maps, not one machine.
+
+### The arguments against, which belong in the pitch
+
+Leading with these is what makes the rest credible.
+
+- **The Gicar caps control quality.** 100 ms tick, 25 duty steps, 2.5 s window, against
+  a board that drives SSRs directly at full resolution. If the LCC path measurably
+  underperforms on temperature stability then "easier to install" does not redeem it.
+  That is one measurement in Stage 1, and it should be treated as the number that
+  decides whether this path deserves to exist.
+- **The Gicar does not fail safe.** It latches its last commanded state. That is a
+  permanent software burden a replacement board does not carry.
+- **"LCC machines" is a family.** Bianca and Elizabeth already differ on CN7 direction,
+  FA mapping and brew-demand source, and three of four FA labels are unverified even
+  here.
+- **Maintainer bandwidth is the real constraint**, not technical merit. The way to make
+  a second backend palatable is to own it completely: one machine, its bit map, its
+  tests, additive by construction, support carried by whoever wants it.
 
 ## Verification
 
@@ -610,6 +703,11 @@ dual-boiler display with no hardware. See [`sim/README.md`](../../sim/README.md)
    settle at **60** — one decision per full mains cycle. Then confirm the pump modulates
    smoothly and the transducer reads plausible bar against the mechanical manometer.
 5. One boiler at a time, other element disconnected — PID settles, autotune runs.
+   **Record steady-state temperature stability here**, in °C peak-to-peak at the brew
+   setpoint over 10 minutes, and again during a shot. This is the number that decides
+   whether the retained-Gicar path deserves to exist: 25 duty steps in a 2.5 s window
+   against a board that drives the SSR directly. If it is materially worse than a direct
+   drive, "easier to install" does not redeem it — say so and stop.
 6. Both elements connected: **clamp-meter the supply** and confirm total draw never
    shows both on, including when both PIDs saturate from cold.
 7. Full shot: pressure profile tracked, shot graph recorded, BLE scale stops on
@@ -646,12 +744,18 @@ dual-boiler display with no hardware. See [`sim/README.md`](../../sim/README.md)
   meter-on-the-board question.
 - **Two brains, one machine.** GaggiMate must be the *sole* master of the Gicar bus and
   of the pump. Never assert FA7. Never leave the stock LCC connected alongside.
-- **Upstream divergence.** `Heater` taking an output interface, multi-boiler on the
-  display side, and a new `ControllerConfig` all touch shared code. Keep the LCC
-  peripherals in their own directory and the shared diffs minimal — dual-boiler is on
-  upstream's roadmap (`0x21` is *allocated* to "Dual Boiler" in the expansion template's address table —
-  `0x27` is the entry literally marked `-- Reserved --` — and the UI says "Coming
-  Soon"), so this is a plausible contribution rather than a permanent fork.
+- **Collision with upstream's dual-boiler work is the main project risk**, and it is
+  now a known quantity rather than a guess: an official dual-boiler board is in
+  progress and the firmware will switch modes when it detects it. Stage 2 is written to
+  consume that rather than duplicate it, and `0x21` is already *allocated* to "Dual
+  Boiler" in the expansion template's address table (`0x27` is the entry literally
+  marked `-- Reserved --`). The residual risk is that the abstraction lands keyed to
+  that specific board rather than to a boiler index, which would leave a bus-bit boiler
+  inexpressible. Worth raising early, while it is cheap — see [Upstreaming](#upstreaming).
+- **Shared-code surface.** `Heater` taking an output interface and a new
+  `ControllerConfig` entry still touch common code. Keep the LCC peripherals in their
+  own directory, keep the shared diffs minimal, and land the output-interface change on
+  its own so it can be judged without the rest of this attached to it.
 
 ## Regenerating the diagrams
 
