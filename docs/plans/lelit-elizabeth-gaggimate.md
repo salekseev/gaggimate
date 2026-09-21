@@ -48,14 +48,22 @@ wiring and relays, p.7–8 boilers, p.10 hydraulics, p.15 pump):
 | LEVEL PROBE 85MM | 9600105L1 | Capacitive, service boiler |
 | SENSOR FOR GAUGE 59025-1-T-02-A | 9600009 | Hamlin reed float — tank level |
 | SPARE KIT SILENT PUMP 120V | 4000040 | Vibration pump + damper |
-| Service boiler | 2000008 | 600 cc, **1000 W**, 120 V |
-| Brew boiler | MC752-110 | 300 ml, **1100 W**, 120 V |
+| Service boiler | 2000008 | 600 ml, **1000 W**, 120 V (PDF p.7) |
+| Brew boiler | MC752-110 | 300 ml, **1100 W**, 120 V (PDF p.8) |
 | 4WAY CROSS FITTING | 2200110 | Transducer tap point — already feeds the manometer |
 | Manometer | 3700006/32/34 | Mechanical gauge only; no electronic pressure sensor |
 | OPV | MC931 | Adjustable; sets brew pressure today |
 | Safety thermostats | MC032 / MC521 | 165 °C manual-rearm. **Leave these alone.** |
 | Safety valve | 9700043 | 5.5 bar, service boiler. **Leave alone.** |
 | Anti-vacuum valve | 9700052 | Service boiler. **Leave alone.** |
+
+The brew/service attribution comes from which fittings share each page: p.7 carries the
+5.5 bar safety valve, the anti-vacuum valve and the 85 mm level probe (service-boiler
+parts), p.8 the brass diffuser, LELIT58 group gasket and boiler upper-part kit (the brew
+group). It is consistent with CN9 driving brew and CN7 service across all three docs.
+**Confirm it against your own machine before wiring** — published Elizabeth specs are
+often quoted with a larger service boiler than 600 ml, and the interlock argument below
+rests on these two numbers.
 
 No flowmeter anywhere. **Both elements together exceed a 120 V / 15 A branch circuit, so
 they can never run at once.** That is why the interlock below is a safety requirement,
@@ -104,7 +112,15 @@ Green is new hardware. Red is deliberately disconnected.
 
 ### GaggiMate Pro Rev 1.1 pinout
 
-Confirmed from the published `pro_v1.1_pinout` diagram.
+Confirmed from the published Pro Rev 1.1 pinout diagram at
+`docs.gaggimate.eu/_astro/pro_v1.1_pinout.DuFFP78t_ZPtcIP.webp` — the Pro PCB is not
+open hardware, so that image is the only source.
+
+Every row except the HV block and the Screen header matches the in-repo **Standard**
+schematic pad-for-pad. Two that do not: Standard's `J10` is pin 1 = GND, pin 2 = +3.3V,
+i.e. **reversed** from the order below, and Standard's `J2` is a 2-position L/N block
+rather than a 4-position P/V/N/L. So if you take 3V3 from the Screen header for a level
+shifter, **meter it first** rather than trusting the pin order here.
 
 | Connector | Pins | GPIO |
 |---|---|---|
@@ -295,16 +311,23 @@ New directory `lib/GaggiMateController/src/peripherals/lcc/`:
 
 Changes to shared code, kept small and upstreamable:
 
-- **`Heater.{h,cpp}`** — take an `IDigitalOutput*` instead of a raw `heaterPin`, plus a
-  configurable soft-PWM window. Add a trivial `SimplePinOutput` wrapping
-  `digitalWrite` so existing boards are untouched. **Use a 2500 ms window on the LCC
-  path**: at a 100 ms tick a 1000 ms window gives only 10 duty steps, where 2500 ms
-  gives 25. On the brew boiler that is roughly 44 W of granularity.
+- **`Heater.{h,cpp}`** — take an `IDigitalOutput*` instead of a raw `heaterPin`. Add a
+  trivial `SimplePinOutput` wrapping `digitalWrite` so existing boards are untouched.
+- **Decouple the soft-PWM window from `TUNER_OUTPUT_SPAN` before changing it.** The
+  window is not currently an independent knob: `softPwm()` is only ever called as
+  `softPwm(TUNER_OUTPUT_SPAN)`, and that same constant also sets the PID output ceiling
+  (`setCtrlOutputLimits(0, TUNER_OUTPUT_SPAN)`) and the sampling period
+  (`setSamplingFrequency(TUNER_OUTPUT_SPAN / 1000)` → 1 Hz). Passing 2500 ms while the
+  output still tops out at 1000 would **cap duty at 40 %**. Split them: keep the output
+  span at 1000 and take the window as a separate parameter. **Then** use 2500 ms on the
+  LCC path — at a 100 ms tick a 1000 ms window gives only 10 duty steps where 2500 ms
+  gives 25, roughly 44 W of granularity on the brew boiler.
 - **`ControllerConfig.h`** — new `GM_PRO_LELIT`: identical pins to `GM_PRO_REV_11` so
   `DimmedPump`, `ADSAdc` and `PressureSensor` build exactly as on a Pro, plus
   `lccRxPin` / `lccTxPin`, `boilerCount = 2`, an `lcc` flag and a `skipAlbaPort` flag.
 - **Board selection.** Configs are registered in the constructor and `detectBoard()`
-  **restarts the ESP32 if no `autodetectValue` matches**. A Pro reports `4`, so under
+  **restarts the ESP32 if no `autodetectValue` matches**, after three attempts 500 ms
+  apart plus a 5 s delay. A Pro reports `4`, so under
   `-DGAGGIMATE_LELIT` skip `detectBoard()` and assign `GM_PRO_LELIT` directly rather
   than fighting the divider.
 - **Peripheral construction** — when `lcc`, build `DimmedPump` + `PressureSensor` +
@@ -312,10 +335,23 @@ Changes to shared code, kept small and upstreamable:
   buttons from the LCC instead of `Max31855Thermocouple`, `SimpleRelay`,
   `digitalWrite` and `DigitalInput`. Skip the Alba SoftWire bring-up, which otherwise
   claims GPIO43/44.
-- **`onRelayControl`** — index 0 → FA8 (3-way), index 1 → FA10 (inlet). Keep calling
-  `setValveState()` so the heater feedforward and puck-flow estimator stay correct.
-- **Buttons** — derive `ButtonState` 0/1/2 from status bits `0x08` / `0x10` / `0x20`.
-  Tank-empty (`0x40`) feeds the existing water-level warning.
+- **`onRelayControl` — do not put the inlet solenoid on index 1.** Index 0 is the brew
+  valve and is right for FA8 (the 3-way); keep calling `setValveState()` there so the
+  heater feedforward and puck-flow estimator stay correct. Index 1, though, is the
+  **configurable alt relay**, and `GaggiMateController.cpp` handles it *before*
+  `handlePing()` and the `errorState` check — commented "Alt relay: independent
+  function, no watchdog/error gating". Mapping FA10 there would put a mains solenoid on
+  the one relay path exempt from the ping watchdog and the error latch, and it collides
+  with the user-selectable Grind function driven from `settings.getAltRelayFunction()`.
+  Allocate a new index for FA10 — the schema reserves further indices for exactly this.
+- **Buttons — index 2 is not a free slot.** `ButtonHandler.h` has `BUTTON_COUNT = 3`
+  with `COMBO_BUTTON = 2`, which is a *virtual* index the display synthesises when brew
+  and steam both fire inside `COMBO_WINDOW_MS`. A real index-2 edge from the Elizabeth's
+  third physical button passes the `index >= BUTTON_COUNT` guard and lands in the combo
+  slot, colliding with synthesised events whenever the combo is configured. Mapping the
+  three status bits `0x08` / `0x10` / `0x20` onto indices 0/1/2 therefore needs
+  `BUTTON_COUNT` / `COMBO_BUTTON` reworked first, or a different index for the third
+  button. Tank-empty (`0x40`) feeds the existing water-level warning.
 - **Boot-time steam-switch gesture.** `isSteamSwitchOn()` reads `steamButtonPin`
   directly to open the BLE pairing window. On this machine the buttons arrive over
   CN10, which is not up that early, so this needs either a short wait for the first
@@ -454,17 +490,24 @@ alarmed; "both boilers requested continuously for minutes" is a bug and must be.
 ### What Stage 1 delivers
 
 Full pressure and flow profiling, because the pump and transducer are local to the
-Pro: `PumpControl` `PRESSURE` and `FLOW` modes, the sliding-mode pressure controller,
+Pro: `PumpControl` `PRESSURE` and `FLOW` modes, the pressure controller (`PressureController::getPumpDutyCycleForPressure` — a
+sliding-mode-shaped law with a `tanh` boundary layer and plant-gain inversion; the word
+"sliding" appears nowhere in `lib/`),
 the 1 bar / 9 bar web flow calibration, pressure traces in the shot graph, and
 gravimetric stop over BLE — all unmodified upstream code. Plus brew-boiler PID via
 CN9, all three solenoids, and the panel buttons and LEDs.
 
 ## Stage 2 — service boiler, PID and interlock
 
-The dual-boiler gap is real and sits on both sides of the BLE link: the display
-hardcodes `boiler.index = 0`, the client only ever reads `boilers[0]`, and the UI
-option is disabled — `<option value={2} disabled>Steam Boiler (Coming Soon)</option>`.
-The proto schema is already multi-boiler by index, so the wire format needs nothing.
+The dual-boiler gap sits on both sides of the BLE link. Display side: `Controller.cpp`
+hardcodes `boiler.index = 0`, `GaggiMateClient.cpp` only ever reads `boilers[0]`, and
+the `Steam Boiler` option is `disabled` in `MachineTab.jsx` under a field labelled
+**"Alt Relay / SSR2 Function"** — itself the clearest evidence that SSR2 and
+`ALT_RELAY_STEAM_BOILER` were meant for each other. Controller side:
+`GaggiMateServer.cpp` hardcodes `boilers_count = 1` ("schema allows more"), and
+`GaggiMateController.cpp` **rejects `BoilerControl.index != 0` outright**. The proto
+schema is already multi-boiler by index (`max_count:4`), so the wire format needs
+nothing.
 
 **Controller:**
 
@@ -490,7 +533,9 @@ The proto schema is already multi-boiler by index, so the wire format needs noth
 
 ## Verification
 
-**Unit** — `pio test -e native`, new `test/test_lcc_protocol/`:
+**Unit** — `pio test -e native`, new `test/test_lcc_protocol/`. `[env:native]` carries a
+hand-written `-I` union plus a per-suite comment for every `test/` directory, so adding a
+suite means editing `platformio.ini`, not just creating a folder:
 
 - 0x80 encode / 0x81 decode round-trip; checksum with both seeds.
 - Triplet decode including the invalid → `0xFFFF` path.
@@ -508,9 +553,11 @@ dual-boiler display with no hardware. See [`sim/README.md`](../../sim/README.md)
    thermometer.
 2. Master mode: LEDs and manometer light only.
 3. Solenoids, water in tank, elements disconnected.
-4. Pump on the Pro's dimmed output, no elements, blank basket: verify PSM `cps()`
-   detects 60 Hz correctly, the pump modulates smoothly, and the transducer reads
-   plausible bar against the mechanical manometer.
+4. Pump on the Pro's dimmed output, no elements, blank basket: verify PSM's cycle
+   detection. A full-wave zero-cross detector gives **~120 raw counts at 60 Hz**, which
+   is above the `cps() > 70` threshold, so the divider goes to 2 and `_cps` should
+   settle at **60** — one decision per full mains cycle. Then confirm the pump modulates
+   smoothly and the transducer reads plausible bar against the mechanical manometer.
 5. One boiler at a time, other element disconnected — PID settles, autotune runs.
 6. Both elements connected: **clamp-meter the supply** and confirm total draw never
    shows both on, including when both PIDs saturate from cold.
@@ -551,8 +598,9 @@ dual-boiler display with no hardware. See [`sim/README.md`](../../sim/README.md)
 - **Upstream divergence.** `Heater` taking an output interface, multi-boiler on the
   display side, and a new `ControllerConfig` all touch shared code. Keep the LCC
   peripherals in their own directory and the shared diffs minimal — dual-boiler is on
-  upstream's roadmap (`0x21 Dual Boiler` is a reserved addon address and the UI says
-  "Coming Soon"), so this is a plausible contribution rather than a permanent fork.
+  upstream's roadmap (`0x21` is *allocated* to "Dual Boiler" in the expansion template's address table —
+  `0x27` is the entry literally marked `-- Reserved --` — and the UI says "Coming
+  Soon"), so this is a plausible contribution rather than a permanent fork.
 
 ## Regenerating the diagrams
 

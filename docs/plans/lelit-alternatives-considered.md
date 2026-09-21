@@ -46,9 +46,14 @@ Three independent reasons it cannot carry a power level:
 2. **The bytes are not a command, they are a drain bitmap.** They get clocked
    straight into two STPIC6C595 open-drain latches. A latch output is DC on or off.
    There is no per-bit timing or PWM channel in the part.
-3. **Unknown bits are rejected.** The reference firmware validates
-   `shiftRegister2 & 0xEE || shiftRegister1 & 0xC7 || byte3 & 0xF3` and raises
-   `UNEXPECTED_FLAGS`. For SR2 only `0x01` and `0x10` are legal there.
+3. **The reference firmware rejects unknown bits** —
+   `shiftRegister2 & 0xEE || shiftRegister1 & 0xC7 || byte3 & 0xF3` raises
+   `UNEXPECTED_FLAGS`, leaving only `0x01` and `0x10` legal in SR2. Weigh this one
+   lightly: it is open-lcc's *Bianca* validator, a firmware convention rather than a
+   protocol constraint — the Gicar itself rejects nothing, which is reason 2. And the
+   same `0xC7` mask rejects SR1 bits 0-2, the Elizabeth's own button LEDs, so it
+   demonstrably does not describe this machine. Reasons 1 and 2 are the load-bearing
+   ones.
 
 The only modulation available is toggling the bit at the 100 ms poll rate, into a
 mains relay. That is not dimming.
@@ -171,9 +176,12 @@ The Pro PCB carries *"1× External SSR, 1× Internal SSR, 1× Dimmer Circuit"*. 
 terminal block is `P` (pump, through the dimmer), `V` (valve relay), `N`, `L`. So the
 dimming hardware that none of A–C has is already on the board.
 
-GaggiMate's dimming is **PSM — pulse-skip modulation**, not phase-angle: whole
-half-cycles are passed or skipped, synchronised to a zero-cross input. That is the
-right technique for a vibration pump, because it keeps the drive waveform symmetric.
+GaggiMate's dimming is **PSM — pulse-skip modulation**, not phase-angle: whole mains
+*cycles* are passed or skipped, synchronised to a zero-cross input. (A full-wave
+zero-cross detector produces ~100 counts at 50 Hz or ~120 at 60 Hz, always above the
+`cps() > 70` test, so `setDivider(2)` always applies and one decision is taken per full
+cycle.) Deciding per full cycle rather than per half-cycle is what keeps the drive
+waveform symmetric, which is the point for a vibration pump.
 Phase-angle lamp dimmers produce an asymmetric waveform that a vibe pump is not
 designed to resonate against — a long-standing objection in the espresso community,
 and one PSM sidesteps.

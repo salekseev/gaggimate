@@ -17,6 +17,7 @@ The repository is organized into the following folders:
 .
 ├── boards/             # Custom PlatformIO board definitions
 ├── docs/               # Documentation assets and diagrams
+│   ├── assets/         # Images used by docs and the web UI
 │   ├── diagrams/       # WireViz wiring harnesses (see docs/diagrams/README.md)
 │   └── plans/          # Design/build plans (see docs/plans/README.md)
 ├── icons/              # Source icons and conversion scripts

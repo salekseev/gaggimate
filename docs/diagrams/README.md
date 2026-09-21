@@ -23,13 +23,15 @@ committed `classic`/`classicpro` artifacts are never removed. Only `.svg` and
 
 - The `.svg` is vector, renders inline on GitHub (verified — GitHub emits identical
   `<img>` markup for a repo-relative `.svg` and `.png`), and stays legible on wide
-  harnesses. The equivalent `.png` is roughly 30x larger compressed and barely
+  harnesses. The equivalent `.png` is 30-40x larger compressed (measured: 33x and 36x
+  for the two lelit diagrams, 40-43x for classic and classicpro) and barely
   delta-compresses, so every regeneration would add hundreds of KB to history.
-- The `.html` is roughly three-quarters a byte-for-byte copy of the `.svg`, with the
-  BOM appended as a table. Nothing links to it.
+- The `.html` is 75-90 % a byte-for-byte copy of the `.svg` depending on diagram size,
+  with the BOM appended as a table. Nothing links to it.
 
-`classic.*` and `classicpro.*` predate the script and still have committed `.html`
-and `.png`.
+`classic.*` and `classicpro.*` predate the script and still have committed `.html` and
+`.png`; `classicpro` additionally has no committed `.bom.tsv`, so the source-plus-two-
+artifacts rule above describes the new diagrams rather than the directory as a whole.
 
 **Pass the source you are working on.** With no arguments the script renders every
 source, which has two pre-existing consequences: `classic.yml` fails (see below, and
@@ -67,5 +69,10 @@ Exception: POWER_SWITCH:4 not found.
 
 It declares `POWER_SWITCH` with two pins (line 41) and then wires pin 4 (line 122), so
 the committed `classic.svg` is **not reproducible from its committed source**. The fix
-is either the missing pinlabels or a renumber, plus a regenerate. `classicpro.yml` is
-unaffected and renders cleanly.
+is either the missing pinlabels or a renumber, plus a regenerate.
+
+`classicpro.yml` renders cleanly, with no errors or warnings — but its committed `.svg`
+is not byte-reproducible either (regenerates ~110.6 kB against the committed 105.1 kB),
+because it was produced by an older graphviz. By contrast the two `lelit-*` `.svg` and
+`.bom.tsv` files **are** byte-identical to a fresh render under the pinned 0.4.1, which
+is the property the pin exists to give you.

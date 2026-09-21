@@ -11,9 +11,10 @@ then largely deleted.
 - **One plan per machine or capability**, named `<vendor>-<machine>-<topic>.md`.
 - **Open with a `**Status:**` line** stating plainly what does and does not exist yet,
   so a reader never has to guess whether the code is there.
-- **Anchor claims to greppable symbols** — `Controller.cpp:924`, `MAX_SAFE_TEMP`,
-  `ALT_RELAY_STEAM_BOILER` — rather than paraphrasing behaviour. That is what makes
-  drift detectable when the code moves underneath.
+- **Anchor claims to greppable symbols** — `MAX_SAFE_TEMP`,
+  `ALT_RELAY_STEAM_BOILER`, `boiler.index = 0` — rather than paraphrasing behaviour, and
+  rather than bare line numbers, which rot fastest. That is what makes drift detectable
+  when the code moves underneath.
 - **Split reference material out.** Wire formats, register maps and provenance tables
   outlive the plan that prompted them, so they belong in their own document that the
   plan links to. Evidence for a rejected approach likewise.

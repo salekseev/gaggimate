@@ -12,13 +12,25 @@ This document is the wire-format reference. For the build that uses it, see
 | Source | What it is | Trust |
 |---|---|---|
 | [`4ndrey/lelit-elizabeth-protocol`](https://github.com/4ndrey/lelit-elizabeth-protocol) | Working ESP32/Arduino library for the Elizabeth **V3**. Both LCC-master and man-in-the-middle modes. | Primary. It is executable, not prose. |
-| [`variegated-coffee/gicar-8.5.04-protocol`](https://github.com/variegated-coffee/gicar-8.5.04-protocol) | Protocol/pinout docs for the Gicar family. Its `lelit-elizabeth.md` is headed **"(speculative)"** with question marks on three of four FA lines. | Corroborating. Distrust its FA labels. |
+| [`variegated-coffee/gicar-8.5.04-protocol`](https://github.com/variegated-coffee/gicar-8.5.04-protocol) | Protocol/pinout docs for the Gicar family. The shift-register bit table is in `general.md`; its `lelit-elizabeth.md` is a 20-line connector list headed **"(speculative)"**, with question marks on two of four FA lines (FA8 and FA10). | Corroborating. Distrust its FA labels. |
 | [`variegated-coffee/open-lcc-rp2040-bianca`](https://github.com/variegated-coffee/open-lcc-rp2040-bianca) | Shipping LCC-replacement firmware for the Bianca. Field-proven master implementation, safety interlocks, timing. | Primary for timing and safety patterns. |
 | [`magnusnordlander/lelit-bianca-protocol`](https://github.com/magnusnordlander/lelit-bianca-protocol) | The Bianca equivalent. Same framing, different bit assignments. | Useful for contrast. |
 
-**Bit positions are stable across all sources. FA *labels* are not.** Where they
-disagree, trust the two code implementations: both put the **pump on SR2 bit 4**,
-while the `gicar-8.5.04-protocol` prose table puts FA7 on SR1 bit 4.
+**Bit positions are stable across all sources. FA *labels* are not — and the
+disagreement is far wider than the pump.** Only **FA9 (SR2 bit 5)** agrees between the
+two sources:
+
+| Bit | `gicar-8.5.04-protocol/general.md` | `4ndrey` Elizabeth library |
+|---|---|---|
+| SR1 bit 4 | FA7 | **FA8** |
+| SR1 bit 5 | FA8 | **FA10** |
+| SR2 bit 4 | FA10 | **FA7** |
+| SR2 bit 5 | FA9 | FA9 |
+
+Note that **FA10 moves to a different shift register** between sources — this is not a
+label swap within a byte. Three of four FA assignments are unverified. Where the two
+code implementations agree (the pump on SR2 bit 4) trust them over the prose table;
+everywhere else, settle it on the bench before wiring a mains solenoid to it.
 
 ## Architecture
 
@@ -93,8 +105,10 @@ Strict request/response. The master writes 0x80 and reads 0x81.
 Elizabeth.** `0x08 | 0x04` is `0x0C`, not `0x0B`, so at least one of those three
 values is wrong, and "minus"/"plus" are Bianca controls; the Elizabeth has top,
 middle and bottom buttons, which arrive in the `uu` byte of the 0x81 frame instead.
-Send `bb = 0x00` until someone establishes what it does here — consistent with the
-safe packet being `80 00 00 00 00`.
+`0x0B` is also rejected by open-lcc's own frame validator, which masks
+`byte3 & 0xF3` — only `0x00`, `0x04`, `0x08` and `0x0C` survive it. Send `bb = 0x00`
+until someone establishes what this byte does on an Elizabeth, consistent with the safe
+packet being `80 00 00 00 00`.
 
 **Safe state is `80 00 00 00 00`.**
 
@@ -130,6 +144,11 @@ return 0xFFFF;   // unknown - treat as sensor error
 
 ## Bit maps (Elizabeth)
 
+> **The CN6 LED labels also disagree between sources**: `4ndrey` has CN6_1 = top and
+> CN6_5 = middle (followed below), while `gicar-8.5.04-protocol/lelit-elizabeth.md`
+> has them the other way round. Cosmetic — it only drives LEDs — but it is the same
+> class of uncertainty.
+>
 > **FA labels in both tables are unverified**, per the provenance note above: bit
 > positions are solid, the FA numbering is not. An implementer who wires "open the
 > 3-way" to the wrong bit opens the inlet instead and pressurises the group with no
@@ -195,7 +214,9 @@ working range; a divergence means you have the gain selection wrong.
 ### Service boiler level
 
 Capacitive probe on CN1, reported as a triplet. Roughly **128 when full**, **600+ when
-low**. The Bianca firmware thresholds at `> 256`.
+low**. The two sources threshold differently: the Bianca firmware uses `> 256`, while
+the `4ndrey` Elizabeth library uses `> 128` (`LELIT_WL_FULL_THRESHOLD`). Pick one on
+the bench against a known water level rather than inheriting either.
 
 There is **no brew boiler level sensor**. Tank level is the single `0x40` status bit.
 
