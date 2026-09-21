@@ -2,8 +2,6 @@ Id	Description	Qty	Unit	Designators
 1	Cable, 2 x 18 AWG	0.55	m	LINE_IN, PUMP_CABLE
 2	Cable, 3 x 22 AWG	0.4	m	SENSOR
 3	Connector, 6.35mm Spade, female, 2 pins	1		PUMP
-4	Connector, Existing machine wiring, 2 pins	1		MACHINE_MAINS
-5	Connector, Pressure transducer, 0-1.6 MPa, 0.5-4.5 V, 3 pins	1		TRANSDUCER
-6	Connector, Terminal block, 4 pos, 4 pins	2		BOARD_HV_PRO, PRESSURE_PORT
-7	PTFE tape or sealant for the pressure tap	1		
-8	Tee fitting for the transducer at 4-way cross 2200110	1		
+4	Connector, Pressure transducer, 0-1.6 MPa, 0.5-4.5 V, 3 pins	1		TRANSDUCER
+5	PTFE tape or sealant for the pressure tap	1		
+6	Tee fitting for the transducer at 4-way cross 2200110	1		

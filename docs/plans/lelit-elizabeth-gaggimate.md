@@ -190,18 +190,48 @@ console during bring-up.
 
 #### Assembly
 
-- Both resistors at the **board** end, inside heatshrink, so the run to the Gicar is
-  plain wire.
+- All three resistors at the **board** end, inside heatshrink, so the run to the Gicar
+  is plain wire.
 - **One ground path only.** Do not additionally bond CN10 pin 4 to chassis or to
   another GND pin on the board.
 - **Never connect CN10 pins 5/6 to the Pro's 3V3 rail.** Two supplies fighting is what
   made Open LCC R1A *"NOT RECOMMENDED for any purpose"*.
 - Route clear of the HV terminal block and the pump leads; cross at right angles if
   unavoidable.
-- Buy a spare Lelit **9600042** cable and cut it — that gives the correct Gicar-side
-  socket and leaves the original intact. The alternative is a TE **280372-1** housing
-  with contacts, which is what Open LCC uses.
-- Orientation: on the stock cable the **red wire is pin 6**.
+#### Sourcing the CN10 connector
+
+Don't buy the OEM cable. Lelit **9600042** is about $31 and you would cut it in half
+anyway. The Gicar's CN10 is a 2.54 mm male header, and the cable-side mate is a
+**TE AMPMODU Mod II** receptacle:
+
+| Part | What | ~CAD |
+|---|---|---|
+| TE **280360** | 6-pos, 1 row, 2.54 mm female receptacle housing, locking ramp | $0.72 |
+| TE **182206-2** ×6 | Mod II socket contact, 22–26 AWG crimp, tin | $0.22 ea |
+
+About **$2** against $31. This is the reference-design family rather than a guess:
+Open LCC's own board-side connector for this bus is **TE 280372-1**, the male Mod II
+6-pos header, and the APEC manufacturing notes recommend AMPMODU Mod 2 throughout
+(with Dupont-style headers as the budget option). Mod II mates with 0.63 mm (0.025")
+square posts, which is what a standard 2.54 mm header presents.
+
+Two things this changes:
+
+- **Use 26 AWG, not the OEM cable's 28 AWG.** Those contacts are specified 22–26 AWG
+  and 28 AWG makes an unreliable crimp. At roughly 2 mA the gauge is electrically
+  irrelevant here, so this costs nothing.
+- **280360 is non-polarized, and that is a hazard on this bus.** A 6-way housing on an
+  unshrouded header can be fitted backwards, mapping pin 1 to pin 6. Since the pigtail
+  populates only pins 2, 3 and 4, a reversed plug puts the **GND wire onto CN10 pin 3 —
+  the Gicar's 5 V push-pull TX output** — shorting an STM8 output pin to ground.
+  Open LCC does not have this exposure because 280372-1 is 3-wall shrouded from the
+  board side; you get no such protection plugging onto the Gicar. Mitigate by marking
+  pin 1 on the housing, leaving the three unused cavities empty as a visual cue, and
+  **continuity-checking pin 4 to GND before the first plug-in** (the listen-only step
+  below is the natural moment).
+
+A proper Mod II crimper gives the best result; for six contacts, hand-crimping and
+reflowing a little solder into the wire barrel is an acceptable substitute.
 
 ### HV rewire and pressure tap
 

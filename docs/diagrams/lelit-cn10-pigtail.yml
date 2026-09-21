@@ -8,17 +8,17 @@ metadata:
 
   templates:
     - &jstxh
-      type: JST XH
+      type: JST XHP-4 housing
       subtype: female
-    - &flat
-      gauge: 28 AWG
+    - &sig
+      gauge: 26 AWG
 
 connectors:
   CN10:
-    type: Lelit 9600042 / TE 280372-1
-    subtype: female
+    type: TE AMPMODU Mod II 280360
+    subtype: female receptacle, 6 pos
     pinlabels: [+12V, TX_TO_GICAR, RX_FROM_GICAR, GND, 3V3_OLED, 3V3_MCU]
-    notes: 6 pos, 2.54mm. Red wire is pin 6. Pins 1, 5, 6 cut back and insulated.
+    notes: NON-POLARIZED - mark pin 1 and continuity-check before the first plug-in. Reversed, GND lands on the Gicar 5 V TX output. Pins 1, 5, 6 unpopulated.
 
   DIVIDER:
     type: Divider network
@@ -34,11 +34,11 @@ connectors:
 
 cables:
   GICAR_SIDE:
-    <<: *flat
+    <<: *sig
     colors: [WH, GN, BK]
     length: 0.3
   BOARD_SIDE:
-    <<: *flat
+    <<: *sig
     colors: [WH, GN, BK]
     length: 0.05
 
@@ -53,6 +53,10 @@ connections:
     - J4: [2, 3, 4]
 
 additional_bom_items:
+  - description: Socket contact for CN10, TE 182206-2, 22-26 AWG crimp tin (3 used, buy spares)
+    qty: 6
+  - description: Crimp contact for J4, JST SXH-001T-P0.6 (3 used, buy spares)
+    qty: 5
   - description: Resistor, 220R, 1/4W - TX series
     designators: [R3]
     qty: 1

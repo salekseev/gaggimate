@@ -1,8 +1,10 @@
 Id	Description	Qty	Unit	Designators
-1	Cable, 3 x 28 AWG	0.35	m	BOARD_SIDE, GICAR_SIDE
-2	Connector, JST XH, female, 4 pins	1		J4
-3	Connector, Lelit 9600042 / TE 280372-1, female, 6 pins	1		CN10
-4	Heatshrink, 6mm, over the divider network	1		
-5	Resistor, 1.5k, 1/4W - RX divider lower	1		R2
-6	Resistor, 1k, 1/4W - RX divider upper	1		R1
-7	Resistor, 220R, 1/4W - TX series	1		R3
+1	Cable, 3 x 26 AWG	0.35	m	BOARD_SIDE, GICAR_SIDE
+2	Connector, JST XHP-4 housing, female, 4 pins	1		J4
+3	Connector, TE AMPMODU Mod II 280360, female receptacle, 6 pos, 6 pins	1		CN10
+4	Crimp contact for J4, JST SXH-001T-P0.6 (3 used, buy spares)	5		
+5	Heatshrink, 6mm, over the divider network	1		
+6	Resistor, 1.5k, 1/4W - RX divider lower	1		R2
+7	Resistor, 1k, 1/4W - RX divider upper	1		R1
+8	Resistor, 220R, 1/4W - TX series	1		R3
+9	Socket contact for CN10, TE 182206-2, 22-26 AWG crimp tin (3 used, buy spares)	6		

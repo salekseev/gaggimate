@@ -18,12 +18,13 @@ metadata:
 connectors:
   MACHINE_MAINS:
     type: Existing machine wiring
+    ignore_in_bom: true
     pinlabels: [L, N]
     notes: Permanent mains, downstream of the main switch but upstream of Gicar FA7. Must not come off a switched contact.
 
   BOARD_HV_PRO:
-    type: Terminal block
-    subtype: 4 pos
+    type: Terminal block, on-board
+    ignore_in_bom: true
     pinlabels: [P, V, N, L]
     notes: DANGER HV. Pro Rev 1.1. P is the dimmed triac output. V unused here. Differs from BOARD_HV on the Standard board.
 
@@ -33,8 +34,8 @@ connectors:
     notes: Lelit 4000040, 120 V. N is the thermal-fuse leg - leave it alone.
 
   PRESSURE_PORT:
-    type: Terminal block
-    subtype: 4 pos
+    type: Terminal block, on-board
+    ignore_in_bom: true
     pinlabels: [GND, X, ANALOG_IN, +5V]
     notes: Feeds the onboard ADS1115. X unused.
 
