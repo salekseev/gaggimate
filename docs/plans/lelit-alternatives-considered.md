@@ -169,7 +169,7 @@ On top of that, the hardware is not in a state to build:
 
 And the opportunity cost is the real argument: the Gicar already provides isolated
 mains switching for the pump, three solenoids and two boiler SSRs, two NTC front ends,
-the capacitive level-probe front end, tank-empty detection and the panel I/O — in a
+the conductive level-probe front end, tank-empty detection and the panel I/O — in a
 certified assembly, over one six-wire cable. Option C discards all of that and makes
 you re-validate it on your own bench.
 

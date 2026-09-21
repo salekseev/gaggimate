@@ -46,14 +46,23 @@ Still useful on its own terms:
   harness diagrams for this approach. Retained as worked WireViz examples; they do not
   describe the current path.
 
-## One correction carried forward
+## Corrections carried forward
 
-The superseded text below describes `BoilerFillPlugin` as the natural home for
-level-based autofill. That is wrong about the current code: `BoilerFillPlugin` is
-**open-loop timers** — `PumpProcess(getStartupFillTime())` at controller-ready and
-`PumpProcess(getSteamFillTime())` on leaving steam mode — and never reads a level. The
-live document states this correctly. Noted here rather than edited below, so the
+Two things the text below gets wrong. Noted here rather than edited in place, so the
 appendix stays a faithful record.
+
+**`BoilerFillPlugin` is not level-based autofill.** The text below calls it the natural
+home for one. It is **open-loop timers** — `PumpProcess(getStartupFillTime())` at
+controller-ready and `PumpProcess(getSteamFillTime())` on leaving steam mode — and never
+reads a level.
+
+**The level probe is conductive, not capacitive.** The text below repeats the upstream
+protocol docs' "capacitive" description. The parts diagram draws 9600105L1 with a single
+Faston blade, an insulating collar and a plain 85 mm rod, so the boiler shell is the
+return electrode. This matters because a conductive front end is far simpler — AC
+excitation and an ADC channel, no capacitance-to-digital part.
+
+The live document states both correctly.
 
 ---
 

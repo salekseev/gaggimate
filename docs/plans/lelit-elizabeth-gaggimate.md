@@ -58,20 +58,33 @@ not a nicety.
 |---|---|---|---|
 | Brew boiler temp | 9600092 | 50 kΩ NTC | Needs an NTC path; the Pro's stock temp input is K-type via MAX31855. `NtcThermistor` exists but is **never instantiated** and expects a 100 kΩ/B3950 NTC in a 10 kΩ divider read through an ADS ADC channel |
 | Service boiler temp | 9600092 | 50 kΩ NTC | same |
-| Service boiler level | 9600105L1, 85 mm | **probably conductive — unverified**, see below | **none — see below** |
+| Service boiler level | 9600105L1, 85 mm | **conductive** single rod, boiler shell as return | **none — see below** |
 | Tank level | 9600009 | Hamlin 59025 reed float | No reed input. GaggiMate's water level is optical: `TofMeasurement { distance }` from a VL53L0X, gated on `capabilities.tof` |
 | Tank present | 9600010 | micro switch | none |
 | Brew pressure | — | mechanical manometer only | Add a 0–1.6 MPa / 0.5–4.5 V transducer; the Pro reads it on an analog terminal block into an onboard ADS1115 |
 
 ### Level sensing is the real gap, and it is not just firmware
 
-**First, the probe type is unverified.** The `gicar-8.5.04-protocol` docs call CN1
-"capacitive", and this document repeated that. But the Silvia Pro X's equivalent is
-explicitly a *conductive* probe — "Conductive Liquid Level sensor, 2 wire, probe +
-boiler ground" — and that is the classic espresso autofill arrangement: a single rod
-with the boiler shell as return. The Elizabeth's 9600105L1 is a single-rod probe with a
-shell return, so **conductive is the more likely reading** and "capacitive" should be
-treated as unconfirmed until someone measures it. It changes what front end is needed.
+**First, the probe is conductive, not capacitive.** The `gicar-8.5.04-protocol` docs
+call CN1 "capacitive" and this document repeated that. The parts diagram settles it —
+p.7 draws 9600105L1 as:
+
+- **a single flat Faston blade terminal**, in the same style as the MC521 thermostat
+  tabs alongside it. One blade is one electrode, so the return must be the boiler shell.
+  Contrast the 9600092 temperature probe on the same page, which exits as a *cable*;
+- **an insulating collar** between the mounting hex and the rod, isolating the electrode
+  from the boiler body — exactly what a rod-versus-shell measurement needs;
+- **a plain 85 mm rod with a stepped tip** — the classic autofill electrode geometry.
+
+A capacitive probe would need a shield or reference, which a single spade tab cannot
+provide. This also matches the Silvia Pro X, whose probe the SPX BOM describes
+explicitly as "Conductive Liquid Level sensor, 2 wire, probe + boiler ground".
+
+**That makes the front end much simpler than capacitive.** No FDC1004 or
+capacitance-to-digital part: AC excitation into a known resistance and one ADC channel
+is enough, with the AC drive there to avoid electrolysis and electrode plating. So
+replacing the SPX design's bulky DIN-mount level controller with something on-board is a
+small circuit, which is plausibly what its author had in mind.
 
 **Second, the reference adapter does not sense level electronically at all.** The SPX
 Adapter Board BOM — the design the new GaggiMate board is reportedly based on —
@@ -237,8 +250,8 @@ single procedure — do not run a second one in parallel.
 ## Open questions for the prototype
 
 1. **Level sensing** — is there any front end, or is the expectation an outboard
-   controller as in the SPX adapter? And measure the 9600105L1 to settle conductive
-   versus capacitive, since that decides the front end.
+   controller as in the SPX adapter? The probe is conductive (established above), so
+   what is needed is AC excitation plus an ADC channel, not a capacitive part.
 2. **Temperature front end** — the SPX adapter reads 10 kΩ/B3950 NTCs through a 1 kΩ
    divider at 3.3 V into an ADS1115, which is exactly the path `NtcThermistor` expects.
    But its constants are file-scope `constexpr` (`Rs=10000, Vs=5.0, Beta=3950,
@@ -258,6 +271,6 @@ single procedure — do not run a second one in parallel.
 - [appendix-retained-gicar.md](appendix-retained-gicar.md) — the superseded approach and
   why it was abandoned.
 - [lelit-lcc-protocol.md](lelit-lcc-protocol.md) — stock LCC↔control-board wire format.
-  Still the best record of what the stock electronics do, including the capacitive probe.
+  Still the best record of what the stock electronics do, including the level probe.
 - [lelit-alternatives-considered.md](lelit-alternatives-considered.md) — why the stock
   bus cannot carry pump power, and why other open-hardware controllers were rejected.

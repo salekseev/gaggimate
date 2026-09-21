@@ -42,7 +42,7 @@ bus has been [superseded](appendix-retained-gicar.md) by a board revision that r
 the control board outright, so nothing here is on the current build path.
 
 It is kept because it is still the best record of what the stock hardware does — in
-particular how it reads the service boiler's capacitive level probe, which any
+particular how it reads the service boiler's conductive level probe, which any
 replacement has to reproduce. Machine facts and controller-independent constraints live
 in [lelit-elizabeth-gaggimate.md](lelit-elizabeth-gaggimate.md).
 
@@ -252,8 +252,13 @@ working range; a divergence means you have the gain selection wrong.
 
 ### Service boiler level
 
-Capacitive probe on CN1, reported as a triplet. Roughly **128 when full**, **600+ when
-low**. The two sources threshold differently: the Bianca firmware uses `> 256`, while
+Probe on CN1, reported as a triplet. Roughly **128 when full**, **600+ when low**.
+
+> The upstream docs describe this probe as "capacitive". It is **conductive** — the
+> parts diagram draws 9600105L1 with a single Faston blade, an insulating collar and a
+> plain 85 mm rod, so the boiler shell is the return electrode. See the sensor section
+> of [lelit-elizabeth-gaggimate.md](lelit-elizabeth-gaggimate.md). An analog reading is
+> consistent with measuring the water path's resistance. The two sources threshold differently: the Bianca firmware uses `> 256`, while
 the `4ndrey` Elizabeth library uses `> 128` (`LELIT_WL_FULL_THRESHOLD`). Pick one on
 the bench against a known water level rather than inheriting either.
 
