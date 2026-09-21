@@ -216,25 +216,79 @@ Checked against the tree, because this is worth knowing precisely rather than as
 
 So there is nothing broken to fix — the feature is absent. The consequence is that **the
 interlock has to be designed in alongside dual-boiler support, not bolted on after.**
-Requirements:
 
-- **It belongs on the controller**, at the point heater outputs are applied, below both
-  PID loops. Not in the display: a dropped link must not be able to leave both elements
-  energised.
-- **Make "both" structurally unrepresentable** — the two loops resolve through one
-  arbiter that can only return a single active boiler — rather than a runtime `if` that
-  a future caller can bypass.
-- **Assert on the applied output state**, not on the arbiter's inputs.
-- **Make it configurable per machine**, from element wattages and supply voltage or
-  simply an alternate-only flag. A 230 V machine would lose steam recovery speed for no
-  benefit, so a blanket always-on default is the wrong trade — but the safe default for
-  an unknown machine is to alternate.
+### Interlock design notes
 
-### Arbiter starvation causes overshoot
+Where the existing code already provides a mechanism, these notes use it rather than
+inventing one.
 
-If the brew boiler takes priority during a shot, the service PID can be denied for the
-whole shot. Its integral must be frozen or clamped while denied, or it slams the service
-element to 100 % the instant brewing ends.
+**1. It lives on the controller, below both loops.** At the point heater outputs are
+applied — not in the display. A dropped BLE link must not be able to leave both elements
+energised, and the display is the least safety-critical of the three participants.
+
+**2. Make "both" unrepresentable rather than checked.** The two loops submit demand to
+one arbiter whose return type can only name a single boiler:
+
+```cpp
+enum class ActiveBoiler : uint8_t { None, Brew, Service };
+```
+
+A runtime `if (brewOn && serviceOn)` is a guard a future caller can route around; a type
+that cannot express "both" is not. This is the whole safety property, so it is worth
+spending the type on.
+
+**3. Time-slice, don't hard-exclude.** "Brew always wins" starves steam indefinitely.
+Allocate the existing soft-PWM window per tick: brew takes the whole window while
+brewing, and the two share when idle — `open-lcc` gives brew roughly 75 % — so the
+service boiler still recovers between shots.
+
+**4. Drive anti-windup through `ctrlOutputLimits`, which already exists.**
+`SimplePID` performs back-calculation anti-windup: it computes the output, and if it
+exceeds `ctrlOutputLimits` it subtracts the excess back out of `feedback_integralState`
+and recomputes (`SimplePID.cpp:65-79`). So the arbiter does not need new windup
+machinery — each tick it tells the limited loop what it is actually allowed:
+
+```cpp
+// share is the fraction of the window this boiler was granted, 0.0 .. 1.0
+pid->setCtrlOutputLimits(0.0f, share * TUNER_OUTPUT_SPAN);
+```
+
+`Heater` currently calls this once at setup with the full span; make it dynamic. **Do
+not** use `reset()` or `resetFeedbackController()` for this — they discard loop state,
+so the boiler re-learns from scratch every time it is denied. Clamping preserves it.
+
+Without this, the denied loop integrates a permanent error for the length of a shot and
+then commands 100 % the instant it is granted the window — straight at the ceiling, and
+into the safe-state oscillation that follows.
+
+**5. Guard the applied output, not the arbiter's inputs.** Mask the assembled output
+against a forbidden-combination constant as the last statement before it is applied, and
+assert there. Testing the arbiter's decision proves the arbiter; testing the output
+proves the machine.
+
+**6. One writer.** If the output path has a shared cache or multiple writer tasks, state
+the rule: the tick task is the only writer, everything else posts requests. A torn read
+during output assembly can produce a combination the arbiter never sanctioned.
+
+**7. Configurable, with a safe default.** Derive the need from element wattages and
+supply voltage, or expose an explicit alternate-only flag. A 230 V machine loses steam
+recovery for no benefit, so always-on is the wrong blanket default — but the default for
+an *unknown* machine must be to alternate. A setting that defaults to "both allowed" is
+the wrong way round.
+
+**Prerequisite.** Time-slicing assumes the soft-PWM window is independent of the PID
+output span. It is not today: `TUNER_OUTPUT_SPAN` is simultaneously the window length,
+the output ceiling and the sampling period. Decouple those first — see
+[Stage 1 in the appendix](appendix-retained-gicar.md#stage-1--the-lcc-backend), which
+works the coupling through — or a shortened window silently caps duty.
+
+**Tests worth writing.** Assert on the serialized output, not the arbiter:
+
+- Both boilers demanding 100 % → at most one active in every emitted output.
+- Fuzzed demand and shared-state combinations → the forbidden combination never appears.
+- A loop denied for a simulated shot's duration → its integral state has not grown, and
+  it does not overshoot when granted the window again.
+- Brew priority holds while brewing; sharing resumes when idle.
 
 ### The dangerous NTC failure is the open circuit, not the short
 
