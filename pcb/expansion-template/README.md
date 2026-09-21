@@ -46,6 +46,14 @@ In firmware these are `ext1Pin`…`ext5Pin` = GPIO 1, 2, 8, 12, 13
 SCL and `ext3Pin` is SDA, per `Wire.begin(ext3Pin, ext2Pin, 400000)` in
 `GaggiMateController::detectAddon()`.
 
+> **Meter the SDA/SCL positions before wiring.** The table above comes from tracing
+> `pcb/Gaggimate.kicad_sch`, which puts GPIO8 (SDA) on pin 6 and GPIO2 (SCL) on pin 7.
+> The SPX Adapter Board BOM, an independently built design, instead lists `EXT-PIN 7` as
+> SDA and `EXT-PIN 8` as SCL. Both sources agree pin 1 is +5V and pin 9 is GND, so this
+> is not a systematic off-by-one — one of them is wrong about the middle pins, and it has
+> not been resolved. Firmware is unambiguous that **SDA is GPIO8 and SCL is GPIO2**; it
+> is the pin *positions* that are in doubt.
+
 **Three of these are direct MCU pins, not expander pins** — GPIO1, GPIO12 and GPIO13.
 That matters if your addon needs real-time I/O (a UART, a pulse input, an interrupt):
 the TCA9555 is far too slow for bit-level timing, but those three pins are routed

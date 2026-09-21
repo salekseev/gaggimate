@@ -58,12 +58,33 @@ not a nicety.
 |---|---|---|---|
 | Brew boiler temp | 9600092 | 50 kΩ NTC | Needs an NTC path; the Pro's stock temp input is K-type via MAX31855. `NtcThermistor` exists but is **never instantiated** and expects a 100 kΩ/B3950 NTC in a 10 kΩ divider read through an ADS ADC channel |
 | Service boiler temp | 9600092 | 50 kΩ NTC | same |
-| Service boiler level | 9600105L1, 85 mm | **capacitive** | **none — see below** |
+| Service boiler level | 9600105L1, 85 mm | **probably conductive — unverified**, see below | **none — see below** |
 | Tank level | 9600009 | Hamlin 59025 reed float | No reed input. GaggiMate's water level is optical: `TofMeasurement { distance }` from a VL53L0X, gated on `capabilities.tof` |
 | Tank present | 9600010 | micro switch | none |
 | Brew pressure | — | mechanical manometer only | Add a 0–1.6 MPa / 0.5–4.5 V transducer; the Pro reads it on an analog terminal block into an onboard ADS1115 |
 
-### The capacitive level probe is a real gap
+### Level sensing is the real gap, and it is not just firmware
+
+**First, the probe type is unverified.** The `gicar-8.5.04-protocol` docs call CN1
+"capacitive", and this document repeated that. But the Silvia Pro X's equivalent is
+explicitly a *conductive* probe — "Conductive Liquid Level sensor, 2 wire, probe +
+boiler ground" — and that is the classic espresso autofill arrangement: a single rod
+with the boiler shell as return. The Elizabeth's 9600105L1 is a single-rod probe with a
+shell return, so **conductive is the more likely reading** and "capacitive" should be
+treated as unconfirmed until someone measures it. It changes what front end is needed.
+
+**Second, the reference adapter does not sense level electronically at all.** The SPX
+Adapter Board BOM — the design the new GaggiMate board is reportedly based on —
+delegates it entirely to a **GRL8-02 standalone AC liquid level controller**, a DIN-mount
+module that reads the probe and switches the steam pump directly. GaggiMate never sees
+the level; the AC wiring just routes `Steam Pump` to the controller's output contact.
+
+The adapter's author flags this as the weak point themselves: the GRL8-02 is *"the
+largest and most expensive part of this kit and would be a great thing to optimize or at
+least find one in a small format"*. So a proper front end plus firmware support is
+already something that design wants, not a new ask.
+
+### The firmware side of the same gap
 
 Searched the firmware: there is **no capacitive or conductive level sensing anywhere**.
 No FDC1004, no capacitive driver, no conductivity driver. The only "conductivity" in the
@@ -85,6 +106,27 @@ agreed **before** the board is finalised.
 For what the stock electronics do with this probe — a 3-byte value, roughly 128 when
 full and 600+ when low — see [lelit-lcc-protocol.md](lelit-lcc-protocol.md). That is the
 behaviour a replacement has to reproduce.
+
+## Reference design: the SPX Adapter Board
+
+The new GaggiMate board is reportedly based on the **Silvia Pro X adapter board**, so
+its BOM is the best available preview of what to expect. Worth knowing, with the
+Elizabeth differences called out:
+
+| Function | SPX adapter | Elizabeth difference |
+|---|---|---|
+| Boiler temps | 10 kΩ B3950 NTC → 1 kΩ divider at 3.3 V → **ADS1115** channel | **50 kΩ β≈4018**. Same topology, different divider values, and `NtcThermistor`'s constants are hardcoded for neither |
+| Heaters | 2× **Carlo Gavazzi RF1A23M25**, 9–18 VDC control, sunk by a **ULN2003AN** off a DC-DC boost to 12 V | Same need — two SSRs. Note these are 12 V-control, not the 3.3 V-logic SSR drive on a Standard board |
+| Digital I/O | **PCF8575** I²C expander for tank level in and panel LED out | Elizabeth has three buttons, three button LEDs and a manometer lamp — more I/O, same approach |
+| Tank level | vacuum switch, N.O., into the expander | Elizabeth uses a **reed float** (9600009) plus a tank-present microswitch |
+| Steam boiler level | **GRL8-02 outboard AC controller** — see above | same probe class; same gap |
+| Pump / valve | GaggiMate `P` and `V` outputs via a 7-pole Phoenix AC terminal | same |
+| Pressure | transducer at the brew pump outlet | Elizabeth: tap the 4-way cross, part 2200110 |
+| I²C + power | taken off the **expansion connector** (5 V, GND, SDA, SCL) | same — but see the pin-position caveat in `pcb/expansion-template/README.md` |
+
+Two things the adapter's author already wants improved, which are therefore easy asks
+rather than new ones: replacing the bulky DIN-mount level controller, and moving the
+switches and SSR control onto the I²C expander.
 
 ## Constraints that bind any controller
 
@@ -194,11 +236,15 @@ single procedure — do not run a second one in parallel.
 
 ## Open questions for the prototype
 
-1. **Capacitive level probe** — does the board have a front end for the 85 mm probe, or
-   does "every connection the gicar has" mean the connector set? Firmware support is a
-   separate gap either way (see above).
-2. **Temperature front end** — NTC or K-type? The machine has two 50 kΩ NTCs; swapping
-   both probes is avoidable work if the board reads NTCs.
+1. **Level sensing** — is there any front end, or is the expectation an outboard
+   controller as in the SPX adapter? And measure the 9600105L1 to settle conductive
+   versus capacitive, since that decides the front end.
+2. **Temperature front end** — the SPX adapter reads 10 kΩ/B3950 NTCs through a 1 kΩ
+   divider at 3.3 V into an ADS1115, which is exactly the path `NtcThermistor` expects.
+   But its constants are file-scope `constexpr` (`Rs=10000, Vs=5.0, Beta=3950,
+   Ro=100000`), so they match neither the SPX divider nor the Elizabeth's **50 kΩ
+   β≈4018** probes. Parameterising them per board is small and now demonstrably needed
+   by two machines.
 3. **Tank level** — reed float input, or is the expectation a ToF retrofit?
 4. **Pump output** — is there a dimmer, and is it PSM like the Pro's?
 5. **Pressure input** — analog terminal block as on the Pro?
