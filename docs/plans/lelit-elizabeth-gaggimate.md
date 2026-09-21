@@ -58,7 +58,7 @@ not a nicety.
 |---|---|---|---|
 | Brew boiler temp | 9600092 | 50 kΩ NTC | Needs an NTC path; the Pro's stock temp input is K-type via MAX31855. `NtcThermistor` exists but is **never instantiated** and expects a 100 kΩ/B3950 NTC in a 10 kΩ divider read through an ADS ADC channel |
 | Service boiler temp | 9600092 | 50 kΩ NTC | same |
-| Service boiler level | 9600105L1, 85 mm | **conductive** single rod, boiler shell as return | **none — see below** |
+| Service boiler level | 9600105L1, 85 mm | **conductive**, single electrode, boiler shell as return. Point-level, not continuous | **none — see below** |
 | Tank level | 9600009 | Hamlin 59025 reed float | No reed input. GaggiMate's water level is optical: `TofMeasurement { distance }` from a VL53L0X, gated on `capabilities.tof` |
 | Tank present | 9600010 | micro switch | none |
 | Brew pressure | — | mechanical manometer only | Add a 0–1.6 MPa / 0.5–4.5 V transducer; the Pro reads it on an analog terminal block into an onboard ADS1115 |
@@ -79,6 +79,19 @@ p.7 draws 9600105L1 as:
 A capacitive probe would need a shield or reference, which a single spade tab cannot
 provide. This also matches the Silvia Pro X, whose probe the SPX BOM describes
 explicitly as "Conductive Liquid Level sensor, 2 wire, probe + boiler ground".
+
+Product photographs of the part confirm the construction: one flat spade terminal, an
+insulating washer, a brass clamp nut, a stainless hex, a **large white PTFE/ceramic
+insulator body**, the stainless mounting hex, then a **PTFE sleeve over the upper rod**
+and a bare stainless rod with a stepped tip.
+
+**That sleeve is the important detail.** Only the rod's lower exposed portion contacts
+water, and that masking is what sets the trip point. So this is a **point-level
+(threshold) sensor, not a continuous level gauge** — the Gicar's analog value is reading
+the presence or absence of a conductive path, with the magnitude reflecting the water's
+resistance, rather than a fill height. Autofill is therefore a threshold with
+hysteresis, which is what the Bianca firmware's `> 256` comparison amounts to. Do not
+try to interpret the value as a percentage full.
 
 **That makes the front end much simpler than capacitive.** No FDC1004 or
 capacitance-to-digital part: AC excitation into a known resistance and one ADC channel

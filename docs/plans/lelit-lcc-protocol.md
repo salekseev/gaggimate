@@ -254,11 +254,14 @@ working range; a divergence means you have the gain selection wrong.
 
 Probe on CN1, reported as a triplet. Roughly **128 when full**, **600+ when low**.
 
-> The upstream docs describe this probe as "capacitive". It is **conductive** — the
-> parts diagram draws 9600105L1 with a single Faston blade, an insulating collar and a
-> plain 85 mm rod, so the boiler shell is the return electrode. See the sensor section
-> of [lelit-elizabeth-gaggimate.md](lelit-elizabeth-gaggimate.md). An analog reading is
-> consistent with measuring the water path's resistance. The two sources threshold differently: the Bianca firmware uses `> 256`, while
+> The upstream docs describe this probe as "capacitive". It is **conductive** — a single
+> electrode with the boiler shell as return, confirmed from the parts diagram and from
+> photographs of the part. See the sensor section of
+> [lelit-elizabeth-gaggimate.md](lelit-elizabeth-gaggimate.md).
+>
+> It is also **point-level, not continuous**: a PTFE sleeve masks the upper rod so only
+> the lower tip contacts water. Treat this value as a threshold with hysteresis, not a
+> percentage full — which is what the Bianca firmware's `> 256` comparison amounts to. The two sources threshold differently: the Bianca firmware uses `> 256`, while
 the `4ndrey` Elizabeth library uses `> 128` (`LELIT_WL_FULL_THRESHOLD`). Pick one on
 the bench against a known water level rather than inheriting either.
 
