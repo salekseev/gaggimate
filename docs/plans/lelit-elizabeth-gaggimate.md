@@ -54,10 +54,12 @@ wiring and relays, p.7–8 boilers, p.10 hydraulics, p.15 pump):
 | Manometer | 3700006/32/34 | Mechanical gauge only; no electronic pressure sensor |
 | OPV | MC931 | Adjustable; sets brew pressure today |
 | Safety thermostats | MC032 / MC521 | 165 °C manual-rearm. **Leave these alone.** |
+| Safety valve | 9700043 | 5.5 bar, service boiler. **Leave alone.** |
+| Anti-vacuum valve | 9700052 | Service boiler. **Leave alone.** |
 
 No flowmeter anywhere. **Both elements together exceed a 120 V / 15 A branch circuit, so
 they can never run at once.** That is why the interlock below is a safety requirement,
-not a nicety. The two wattages are in the table above and are not restated elsewhere.
+not a nicety.
 
 ## Architecture
 
@@ -330,6 +332,95 @@ plan adds is where they are enforced and why:
    watchdog reset clears a latched element. Hook into the existing ping-timeout and
    thermal-runaway paths.
 
+### Failure modes the implementation must handle
+
+The invariants above cover *bad commands*. These are the cases where the master's own
+software is the thing that fails, and they need designing for rather than discovering.
+
+**Silence is undetectable by design.** "Keep transmitting the safe packet" is code
+inside the component that just stopped running. If the `LccBus` tick task wedges on a
+mutex, is starved by BLE/WiFi, or dies while the rest of the firmware carries on, the
+Gicar simply latches whatever it last received. Worse, **the 0x81 response carries no
+echo of the actuator bitmap**, so there is never positive confirmation that a bit took
+effect — arriving 0x81 frames prove the link is alive, not that the last command
+landed, and a `uart_write_bytes` into a cut wire returns success. Note the asymmetry in
+the flowchart above: it checks the *display* link, which holds the least
+safety-critical component, and has no equivalent check on `LccBus` itself. Required:
+subscribe the tick task to the ESP32 task watchdog, bound every UART call with a
+timeout plus `uart_wait_tx_done()`, and have an independent task force
+`esp_restart()` if a transmit-liveness counter stops advancing for ~300 ms. Without
+that reset, the boot safe packet never runs for this failure. **With a heater bit
+latched, MC032/MC521 at 165 °C are the only remaining protection.**
+
+**The boot window is only dangerous on a warm reset.** On a cold power-up the Gicar
+loses power alongside the ESP32 and boots safe by itself. The hazard is an ESP32-only
+reset — watchdog, brownout, USB replug, OTA — where the Gicar keeps power and keeps the
+pre-reset bitmap latched through the ROM bootloader and all of app init. Send the first
+safe packet immediately after `Serial1.begin()`, ahead of BLE, WiFi, NVS, display and
+plugin init, and hold a budget of ≤ 500 ms from reset to first safe frame. Whatever
+replaces the boot-time steam-switch gesture must not block the tick task from starting.
+
+**The both-boilers interlock has no backstop whatsoever.** 1000 W + 1100 W at 120 V is
+17.5 A — 117 % of a 15 A breaker, which a UL 489 breaker may carry for an hour or
+indefinitely. The 165 °C thermostats are per-boiler thermal cutouts and both boilers
+are at normal temperature, so neither opens. The failure is therefore not a trip and
+not a thermostat: it is the machine's inlet wiring, main switch and cord carrying a
+sustained overload they were never sized for. So this interlock is the *only* thing
+standing between a software bug and an overloaded cord. Accordingly: make "both" not
+representable — the two heaters resolve through one arbiter returning a single active-
+boiler enum — mask the assembled bytes against a forbidden-bits constant as the last
+statement before transmit, and assert on the **serialized frame**, not on the arbiter's
+inputs. `LccOutputBank` needs a stated concurrency rule too: one writer (the tick
+task), everyone else posts requests.
+
+**Arbiter starvation feeds back into overshoot.** Brew takes 100 % of slots while
+brewing, so the service PID can be denied for a whole shot. Its integral term must be
+frozen or clamped while denied, or it slams the service element to 100 % the moment
+brewing ends.
+
+**FA7 needs an enforcement point, not just a rule.** "Never assert FA7" appears three
+times in this plan with no location. It matters because the frame puts **SR2 before
+SR1** — counterintuitive, and an implementer who "fixes" that order sends the intended
+FA8 (SR1 `0x10`) and FA10 (SR1 `0x20`) as SR2 `0x10` and SR2 `0x20`, which are FA7
+pump and FA9 water solenoid. The heater bits happen to fail safe under the same swap,
+which makes it harder to notice. Mask the assembled SR2 byte against a constant
+containing FA7, with a test asserting no frame ever sets SR2 bit 4.
+
+**A stuck or open sensor defeats the ceilings.** `isErrorState()` on `0xFFFF` plus
+stale-packet detection covers decode and transport, not values. A frozen-but-plausible
+reading arrives fresh every 100 ms and passes every check; the PID sees a permanent
+deficit and commands 100 % forever. The dangerous NTC direction is the *open* circuit,
+not the short: open reads as cold forever, so duty pins high and the ceiling never
+trips, while a short reads hot and fails safe. The docs have an upper bound and no
+lower bound. Required: a lower bound; a rate-of-rise check (duty above 50 % for 30 s
+must produce ≥ 2 °C); identical raw triplets for 50 consecutive packets on a heating
+boiler is a fault; a physical-plausibility rate limit on decoded temperature, which
+also covers the roughly 1-in-128 corrupt frames a 7-bit checksum lets through on an
+unshielded ribbon near mains switching. **Cross-check the two gain channels every
+tick** — that redundancy already exists in the protocol and is currently used only as a
+unit-test hint. Decide and state the blast radius: "either boiler over ceiling → safe"
+means one failed service NTC disables the brew boiler too.
+
+**A bus bail does not stop the pump.** The safe state is defined purely as the 0x80
+bitmap, and the pump now lives on the Pro's triac. A `LccBus` bail leaves heaters off,
+solenoids shut and the pump running, deadheaded against the OPV. A bail must also
+command `PumpControl` to zero. The same split bites Stage 2 autofill, which spans FA9
+on the bus and the pump off it: a bus fault mid-autofill latches FA9 open while the
+pump keeps running, overfilling the service boiler with no thermal cutout involved.
+Autofill needs a hard time limit and an abort-on-bus-fault rule.
+
+**Staleness and recovery need numbers.** Enter the safe state after 3 missed ticks
+(300 ms); leave it only after 5 consecutive valid frames. Without hysteresis a marginal
+CN10 connection oscillates a 1100 W element at the noise rate.
+
+**Every bail must be visible.** A machine that silently stops heating is the worst
+debugging experience available, and the controller can sit in a safe state while the
+display still shows a shot in progress. Each reason — stale frame, checksum reject
+rate, ceiling exceeded, sensor fault, channel disagreement, transmit-liveness failure —
+gets an enumerated code carried in `SensorData` and surfaced with an action ("Gicar
+link lost — check CN10"). Arbitration events are normal and should be counted, not
+alarmed; "both boilers requested continuously for minutes" is a bug and must be.
+
 ### What Stage 1 delivers
 
 Full pressure and flow profiling, because the pump and transducer are local to the
@@ -395,9 +486,16 @@ dual-boiler display with no hardware. See [`sim/README.md`](../../sim/README.md)
    shows both on, including when both PIDs saturate from cold.
 7. Full shot: pressure profile tracked, shot graph recorded, BLE scale stops on
    weight. Run the 1 bar / 9 bar flow calibration.
-8. Pull CN10 mid-shot; confirm the machine ends up safe and recovers on re-seat.
-   Power-cycle with a boiler bit set to confirm the boot safe-packet clears it.
-9. Restore the stock LCC and the FA7 pump wire; confirm the machine runs bone stock.
+8. Pull CN10 mid-shot. Confirm the machine ends up safe — including that **the pump
+   stops**, which the bus safe state alone does not do now that the pump is on the
+   Pro's triac — and that it recovers on re-seat.
+9. **Warm-reset test, not a power cycle.** With a boiler bit set, reset the ESP32 alone
+   (reset button or `esp_restart()`) while the Gicar keeps its own power, and
+   clamp-meter how long the element stays energized before the boot safe packet lands.
+   A full power cycle does *not* test this: it drops the Gicar too, which then boots
+   safe by itself. The warm reset is the only case where the Gicar latches across a
+   restart of the master.
+10. Restore the stock LCC and the FA7 pump wire; confirm the machine runs bone stock.
 
 ## Risks
 

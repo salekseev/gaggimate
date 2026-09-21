@@ -88,7 +88,13 @@ Strict request/response. The master writes 0x80 and reads 0x81.
     +-------------- shift register 2 bitmap
 ```
 
-`bb`: `0x08` = minus, `0x04` = plus, `0x0B` = both.
+`bb` echoes the front-panel buttons back to the Gicar. The upstream docs give
+`0x08` = minus, `0x04` = plus, `0x0B` = both — **treat this as unverified on the
+Elizabeth.** `0x08 | 0x04` is `0x0C`, not `0x0B`, so at least one of those three
+values is wrong, and "minus"/"plus" are Bianca controls; the Elizabeth has top,
+middle and bottom buttons, which arrive in the `uu` byte of the 0x81 frame instead.
+Send `bb = 0x00` until someone establishes what it does here — consistent with the
+safe packet being `80 00 00 00 00`.
 
 **Safe state is `80 00 00 00 00`.**
 
@@ -123,6 +129,11 @@ return 0xFFFF;   // unknown - treat as sensor error
 ```
 
 ## Bit maps (Elizabeth)
+
+> **FA labels in both tables are unverified**, per the provenance note above: bit
+> positions are solid, the FA numbering is not. An implementer who wires "open the
+> 3-way" to the wrong bit opens the inlet instead and pressurises the group with no
+> release path. Confirm each on the bench before trusting it.
 
 ### Shift register 1 — byte `jj`
 
@@ -243,7 +254,7 @@ From `open-lcc-rp2040-bianca`, which has these in the field:
 | Interlock | Rationale |
 |---|---|
 | **Never both boiler SSR bits in one frame** | Two elements on one branch circuit. On a 120 V Elizabeth that is 1000 W + 1100 W. |
-| Temperature ceilings → safe state | 140 °C brew, 150 °C service. GaggiMate's own `MAX_SAFE_TEMP` is 170 °C, which is too loose for the service boiler. |
+| Temperature ceilings → safe state | 140 °C brew, 150 °C service. GaggiMate's own `MAX_SAFE_TEMP` (170 °C) is too loose for the service boiler; keep it as a redundant outer bound rather than replacing it, so whichever fires first is still a bail. |
 | Invalid or stale 0x81 → safe state | |
 | Master unresponsive → safe state | |
 | Power sharing between boilers | Brew priority; brew takes 100 % of slots while brewing. |
