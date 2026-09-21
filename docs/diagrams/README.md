@@ -15,19 +15,27 @@ scripts/make_wiring_diagrams.sh                              # all sources
 scripts/make_wiring_diagrams.sh docs/diagrams/<name>.yml     # one source
 ```
 
-The script creates a local venv pinned to **WireViz 0.4.1** and, after rendering,
-deletes the `.html` and `.png` that WireViz also emits. Only `.svg` and `.bom.tsv`
-are committed:
+The script creates a local venv pinned to **WireViz 0.4.1** (checking the version, so
+a pre-existing venv cannot silently bypass the pin) and, after rendering, deletes the
+`.html` and `.png` that WireViz also emits — but only when they are untracked, so the
+committed `classic`/`classicpro` artifacts are never removed. Only `.svg` and
+`.bom.tsv` are committed for sources added since:
 
 - The `.svg` is vector, renders inline on GitHub (verified — GitHub emits identical
   `<img>` markup for a repo-relative `.svg` and `.png`), and stays legible on wide
-  harnesses. The equivalent `.png` is roughly 40x larger packed and barely
+  harnesses. The equivalent `.png` is roughly 30x larger compressed and barely
   delta-compresses, so every regeneration would add hundreds of KB to history.
-- The `.html` is about 89% a byte-for-byte copy of the `.svg`, with the BOM appended
-  as a table. Nothing links to it.
+- The `.html` is roughly three-quarters a byte-for-byte copy of the `.svg`, with the
+  BOM appended as a table. Nothing links to it.
 
 `classic.*` and `classicpro.*` predate the script and still have committed `.html`
 and `.png`.
+
+**Pass the source you are working on.** With no arguments the script renders every
+source, which has two pre-existing consequences: `classic.yml` fails (see below, and
+the script reports it and exits non-zero rather than masking it), and `classicpro`'s
+committed artifacts were produced by graphviz 12.2.0, so a modern graphviz
+regenerates them byte-differently and dirties three tracked files.
 
 ## Gotchas
 
