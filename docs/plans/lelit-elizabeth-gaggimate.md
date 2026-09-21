@@ -136,8 +136,14 @@ behaviour a replacement has to reproduce.
 ## Reference design: the SPX Adapter Board
 
 The new GaggiMate board is reportedly based on the **Silvia Pro X adapter board**, so
-its BOM is the best available preview of what to expect. Worth knowing, with the
-Elizabeth differences called out:
+its BOM is the best available preview of what to expect.
+
+Source: [SPX Adapter Board BOM](https://docs.google.com/spreadsheets/d/e/2PACX-1vSxFmOAwAkJ8xUGDV4FLHnhvBW5Qs9sc04x0-XNw-c60mpDzi-Gj8OuUcMsflu3L3f23BXiXErgrmJc/pubhtml)
+(published sheet). It covers interface connectors, the Lego-build component list, the
+Gicar-side signal layout for both DC and AC, the GaggiMate-side connections, and
+installation notes including removal and what to add.
+
+Worth knowing, with the Elizabeth differences called out:
 
 | Function | SPX adapter | Elizabeth difference |
 |---|---|---|
