@@ -232,11 +232,9 @@ pre-infusion parameters and no error codes on this bus. Everything is the master
 job. Pre-infusion is expressed only as the master's own timing of the pump and
 solenoid bits.
 
-**3. Pump power is a single bit.** `SR2 & 0x10`, a `bool`. The frame is fixed at five
-bytes with no spare field, and the bytes are shift-register drain bitmaps clocked into
-open-drain latches — DC on or off per drain, with no per-bit timing. Variable pump
-power is not expressible on this protocol at any version. See
-[lelit-alternatives-considered.md](lelit-alternatives-considered.md).
+**3. Pump power is a single bit** — `SR2 & 0x10`, a `bool`. Variable pump power is not
+expressible on this protocol at any version; the three independent reasons are in
+[the evidence log](lelit-alternatives-considered.md#a-command-pump-power-over-the-lcc-bus--impossible).
 
 ## Interlocks worth copying
 
@@ -245,7 +243,7 @@ From `open-lcc-rp2040-bianca`, which has these in the field:
 | Interlock | Rationale |
 |---|---|
 | **Never both boiler SSR bits in one frame** | Two elements on one branch circuit. On a 120 V Elizabeth that is 1000 W + 1100 W. |
-| Temperature ceilings → safe state | 140 °C brew, 150 °C service. |
+| Temperature ceilings → safe state | 140 °C brew, 150 °C service. GaggiMate's own `MAX_SAFE_TEMP` is 170 °C, which is too loose for the service boiler. |
 | Invalid or stale 0x81 → safe state | |
 | Master unresponsive → safe state | |
 | Power sharing between boilers | Brew priority; brew takes 100 % of slots while brewing. |

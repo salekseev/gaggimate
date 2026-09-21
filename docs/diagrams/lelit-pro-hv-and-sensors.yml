@@ -1,58 +1,57 @@
 metadata:
   title: Lelit Elizabeth - GaggiMate Pro HV rewire and pressure tap
-  description: Pump moved from Gicar FA7 to the Pro dimmed P terminal. Transducer on the Pro pressure port. Gicar FA7 is abandoned - disconnect its tab, cut back, insulate, and never assert SR2 bit 4.
+  description: Pump moved from Gicar FA7 to the Pro dimmed P terminal. Transducer on the Pro pressure port.
+
+  template:
+    name: din-6771
+    sheetsize: A3
 
   templates:
+    - &spade
+      type: 6.35mm Spade
+      subtype: female
     - &hv
       gauge: 18 AWG
     - &lv
       gauge: 22 AWG
-    - &spade
-      type: 6.35mm Spade
-      subtype: female
 
 connectors:
   MACHINE_MAINS:
     type: Existing machine wiring
-    subtype: downstream of main switch
-    pinlabels: [LINE, NEUTRAL]
-    notes: Permanent mains, upstream of Gicar FA7. The dimmer derives zero-cross from its input side, so this must NOT come off a switched contact.
+    pinlabels: [L, N]
+    notes: Permanent mains, downstream of the main switch but upstream of Gicar FA7. Must not come off a switched contact.
 
-  J2_HV:
+  BOARD_HV_PRO:
     type: Terminal block
-    subtype: GaggiMate Pro Rev 1.1, DANGER HV
+    subtype: 4 pos
     pinlabels: [P, V, N, L]
-    notes: P is the dimmed triac output driven by PSM. V (valve relay) unused on this build - the 3-way stays on Gicar FA8.
+    notes: DANGER HV. Pro Rev 1.1. P is the dimmed triac output. V unused here. Differs from BOARD_HV on the Standard board.
 
   PUMP:
     <<: *spade
-    pinlabels: [LIVE, NEUTRAL]
-    notes: Lelit 4000040 silent vibration pump, 120 V. NEUTRAL is the thermal-fuse leg - leave it alone. Its LIVE no longer comes from Gicar FA7; the triac is now the only switch in this circuit.
+    pinlabels: [L, N]
+    notes: Lelit 4000040, 120 V. N is the thermal-fuse leg - leave it alone.
 
   PRESSURE_PORT:
     type: Terminal block
-    subtype: GaggiMate Pro, 4 pos
+    subtype: 4 pos
     pinlabels: [GND, X, ANALOG_IN, +5V]
-    notes: Feeds the onboard ADS1115 on GPIO41/42. X is unused.
+    notes: Feeds the onboard ADS1115. X unused.
 
   TRANSDUCER:
     type: Pressure transducer
-    subtype: 0-1.6 MPa, 0.5-4.5 V ratiometric
+    subtype: 0-1.6 MPa, 0.5-4.5 V
     pinlabels: [+5V, SIGNAL, GND]
-    notes: Tap at the 4-way cross fitting 2200110, which already feeds the mechanical manometer.
+    notes: Tap at the 4-way cross fitting 2200110.
 
 cables:
   LINE_IN:
     <<: *hv
     colors: [BN, BU]
     length: 0.3
-  PUMP_LIVE:
+  PUMP_CABLE:
     <<: *hv
-    colors: [BN]
-    length: 0.25
-  PUMP_NEUT:
-    <<: *hv
-    colors: [BU]
+    colors: [BN, BU]
     length: 0.25
   SENSOR:
     <<: *lv
@@ -63,22 +62,18 @@ connections:
   -
     - MACHINE_MAINS: [1, 2]
     - LINE_IN: [1, 2]
-    - J2_HV: [4, 3]
+    - BOARD_HV_PRO: [4, 3]
   -
-    - J2_HV: [1]
-    - PUMP_LIVE: [1]
-    - PUMP: [1]
-  -
-    - J2_HV: [3]
-    - PUMP_NEUT: [1]
-    - PUMP: [2]
+    - BOARD_HV_PRO: [1, 3]
+    - PUMP_CABLE: [1, 2]
+    - PUMP: [1, 2]
   -
     - TRANSDUCER: [1, 2, 3]
     - SENSOR: [1, 2, 3]
     - PRESSURE_PORT: [4, 3, 1]
 
 additional_bom_items:
-  - description: Tee fitting for transducer at 4-way cross 2200110
+  - description: Tee fitting for the transducer at 4-way cross 2200110
     qty: 1
-  - description: PTFE tape / sealant for the pressure tap
+  - description: PTFE tape or sealant for the pressure tap
     qty: 1

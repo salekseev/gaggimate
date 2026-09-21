@@ -2,49 +2,54 @@ metadata:
   title: Lelit Elizabeth - CN10 signal pigtail
   description: Gicar 8.5.04 power card 9600077 to GaggiMate Pro Rev 1.1 UART port J4
 
+  template:
+    name: din-6771
+    sheetsize: A3
+
   templates:
-    - &lv
+    - &jstxh
+      type: JST XH
+      subtype: female
+    - &flat
       gauge: 28 AWG
 
 connectors:
   CN10:
     type: Lelit 9600042 / TE 280372-1
-    subtype: female, 6 pos, 2.54mm
+    subtype: female
     pinlabels: [+12V, TX_TO_GICAR, RX_FROM_GICAR, GND, 3V3_OLED, 3V3_MCU]
-    notes: Gicar power card. Red wire is pin 6. Pins 1, 5, 6 cut back and insulated - never bond them to the Pro 3V3 rail.
+    notes: 6 pos, 2.54mm. Red wire is pin 6. Pins 1, 5, 6 cut back and insulated.
 
   DIVIDER:
-    type: Resistor pack
-    subtype: heatshrink, board end
+    type: Divider network
+    subtype: R1/R2/R3 in heatshrink
     pinlabels: [TX_GICAR, RX_GICAR, TX_BOARD, RX_BOARD, GND]
-    notes: R3 220R series on TX. R1 1k plus R2 1.5k divider on RX gives 3.0 V at GPIO44. Source impedance 600R.
+    ignore_in_bom: true
+    notes: Board end. R3 series on TX. R1/R2 divider on RX. Values in the BOM below.
 
   J4:
-    type: JST XH
-    subtype: female, 4 pos
+    <<: *jstxh
     pinlabels: [+5V, TX_GPIO43, RX_GPIO44, GND]
-    notes: GaggiMate Pro Rev 1.1 UART port. +5V left unconnected - do not back-feed.
+    notes: GaggiMate Pro Rev 1.1 UART port. +5V left unconnected.
 
 cables:
-  W1:
-    <<: *lv
+  GICAR_SIDE:
+    <<: *flat
     colors: [WH, GN, BK]
     length: 0.3
-    notes: Gicar side. Plain wire, no components in this run.
-  W2:
-    <<: *lv
+  BOARD_SIDE:
+    <<: *flat
     colors: [WH, GN, BK]
     length: 0.05
-    notes: Board side pigtail.
 
 connections:
   -
     - CN10: [2, 3, 4]
-    - W1: [1, 2, 3]
+    - GICAR_SIDE: [1, 2, 3]
     - DIVIDER: [1, 2, 5]
   -
     - DIVIDER: [3, 4, 5]
-    - W2: [1, 2, 3]
+    - BOARD_SIDE: [1, 2, 3]
     - J4: [2, 3, 4]
 
 additional_bom_items:
@@ -57,8 +62,5 @@ additional_bom_items:
   - description: Resistor, 1.5k, 1/4W - RX divider lower
     designators: [R2]
     qty: 1
-  - description: Heatshrink, 6mm, over resistor pack
-    qty: 1
-  - description: TVS diode, 3.6V, on RX node (optional)
-    designators: [D1]
+  - description: Heatshrink, 6mm, over the divider network
     qty: 1

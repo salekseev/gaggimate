@@ -48,14 +48,16 @@ wiring and relays, p.7–8 boilers, p.10 hydraulics, p.15 pump):
 | LEVEL PROBE 85MM | 9600105L1 | Capacitive, service boiler |
 | SENSOR FOR GAUGE 59025-1-T-02-A | 9600009 | Hamlin reed float — tank level |
 | SPARE KIT SILENT PUMP 120V | 4000040 | Vibration pump + damper |
-| Boilers | 2000008 (600 cc, **1000 W**) + MC752-110 (300 ml, **1100 W**) | dual, 120 V |
+| Service boiler | 2000008 | 600 cc, **1000 W**, 120 V |
+| Brew boiler | MC752-110 | 300 ml, **1100 W**, 120 V |
 | 4WAY CROSS FITTING | 2200110 | Transducer tap point — already feeds the manometer |
 | Manometer | 3700006/32/34 | Mechanical gauge only; no electronic pressure sensor |
 | OPV | MC931 | Adjustable; sets brew pressure today |
 | Safety thermostats | MC032 / MC521 | 165 °C manual-rearm. **Leave these alone.** |
 
-No flowmeter anywhere. **2100 W of elements on a 120 V / 15 A branch circuit — they
-can never run together.** That is why the interlock below is a safety requirement.
+No flowmeter anywhere. **Both elements together exceed a 120 V / 15 A branch circuit, so
+they can never run at once.** That is why the interlock below is a safety requirement,
+not a nicety. The two wattages are in the table above and are not restated elsewhere.
 
 ## Architecture
 
@@ -88,7 +90,7 @@ flowchart TB
   SR ==> HEAT["CN9 brew SSR<br/>CN7 service SSR"]
   SR ==> SOL["FA8 3-way · FA9 water<br/>FA10 inlet / pre-infusion"]
   SR ==> PANEL["Panel LEDs<br/>manometer light"]
-  AFE --> SENS["2x 50k NTC · capacitive level<br/>tank empty · 3 buttons"]
+  SENS["2x 50k NTC · capacitive level<br/>tank empty · 3 buttons"] --> AFE
 
   style DIM fill:#1b5e20,color:#fff
   style ADS fill:#1b5e20,color:#fff
@@ -96,8 +98,7 @@ flowchart TB
   style FA7 fill:#7f1d1d,color:#fff
 ```
 
-Green is new hardware. Red is deliberately disconnected. Sensor arrows point toward
-the consumer of the data, so `AFE --> SENS` reads as "the front end reads these".
+Green is new hardware. Red is deliberately disconnected.
 
 ### GaggiMate Pro Rev 1.1 pinout
 
@@ -129,10 +130,9 @@ Two things this settles:
 
 ### CN10 signal pigtail
 
-![CN10 pigtail](../diagrams/lelit-cn10-pigtail.png)
+![CN10 pigtail](../diagrams/lelit-cn10-pigtail.svg)
 
 Source: [`lelit-cn10-pigtail.yml`](../diagrams/lelit-cn10-pigtail.yml) ·
-[SVG](../diagrams/lelit-cn10-pigtail.svg) ·
 [BOM](../diagrams/lelit-cn10-pigtail.bom.tsv)
 
 **Two GPIOs plus a shared ground is the entire requirement.** The bus is a plain
@@ -203,10 +203,9 @@ console during bring-up.
 
 ### HV rewire and pressure tap
 
-![Pro HV and sensors](../diagrams/lelit-pro-hv-and-sensors.png)
+![Pro HV and sensors](../diagrams/lelit-pro-hv-and-sensors.svg)
 
 Source: [`lelit-pro-hv-and-sensors.yml`](../diagrams/lelit-pro-hv-and-sensors.yml) ·
-[SVG](../diagrams/lelit-pro-hv-and-sensors.svg) ·
 [BOM](../diagrams/lelit-pro-hv-and-sensors.bom.tsv)
 
 Feed the Pro's HV **L** from **permanent** mains, upstream of FA7 — not from FA7's
@@ -226,29 +225,29 @@ Tap the transducer at the **4-way cross fitting, part 2200110**, which already f
 the mechanical manometer. Back the OPV (MC931) off to roughly 11–12 bar afterwards so
 it stops clamping the profiles.
 
-## Stage 0 — bench validation, before any control logic
+## Stage 0 — settle the bit map before any control logic
 
-The bit map is partly reverse-engineered and the sources disagree on FA labels. Bit
-positions are stable and both code implementations agree **SR2 bit 4 is the pump**;
-the `gicar-8.5.04-protocol` prose table puts FA7 on SR1 bit 4. Settle it on your
-board.
+Stage 0 exists to resolve the facts the plan currently has to assume. Everything it
+needs to *do* on the machine is the first half of the
+[Verification ladder](#verification) — that ladder is the single ordered bring-up
+procedure, and it is not repeated here.
 
-1. Build the pigtail. Spot-check J4's pin order against the published pinout with a
-   meter — +5V and GND are unambiguous — before crimping.
-2. **Native unit tests first** (`pio test -e native`, following
-   `test/test_puckflow_latch/`): frame encode/decode, checksum with both seeds,
-   triplet edge cases, Steinhart-Hart against the cubic polynomials.
-3. **Listen only.** Stock LCC still driving the bus. Sniff pin 3, decode 0x81, confirm
-   both NTC channels track the stock display and a reference thermometer.
-4. **Master mode, LEDs only.** Stock LCC unplugged, **pump and both heating elements
-   physically disconnected.** Drive SR1 bits 0–2 and SR2 bit 0. Validates TX and the
-   bit map with nothing dangerous energized.
-5. **Then solenoids**, water in tank, elements still disconnected. Confirm which of
-   FA8 / FA9 / FA10 does what — the sources label FA10 "inlet / water line" with a
-   question mark, and its exact hydraulic role in pre-infusion is worth knowing.
-6. **Then one element at a time, with the other disconnected.** Then the pump.
-7. Confirm the Elizabeth deviation: **CN7 is a direct MCU GPIO with a 5 V pull-up**,
-   not a shift-register drain — output on the Elizabeth, input on the Bianca.
+**What Stage 0 must establish:**
+
+1. **J4's pin order**, spot-checked against the published pinout with a meter (+5V and
+   GND are unambiguous) before crimping the pigtail.
+2. **Which bit is the pump.** Both code implementations say SR2 bit 4; the
+   `gicar-8.5.04-protocol` prose table says FA7 on SR1 bit 4. See the
+   [provenance table](lelit-lcc-protocol.md#provenance).
+3. **What FA8 / FA9 / FA10 each actually do.** The sources label FA10
+   "inlet / water line" with a question mark, so its hydraulic role in pre-infusion is
+   assumed rather than known.
+4. **Whether CN7 behaves like the other bits**, given it is a direct MCU GPIO rather
+   than a shift-register drain — see the
+   [CN7 caveat](lelit-lcc-protocol.md#bit-maps-elizabeth).
+
+**Do it in this order:** run the native unit tests, then Verification steps 1–4. Do
+not write control logic until steps 1–4 pass and the four facts above are settled.
 
 ## Stage 1 — the LCC backend
 
@@ -268,7 +267,7 @@ Changes to shared code, kept small and upstreamable:
   configurable soft-PWM window. Add a trivial `SimplePinOutput` wrapping
   `digitalWrite` so existing boards are untouched. **Use a 2500 ms window on the LCC
   path**: at a 100 ms tick a 1000 ms window gives only 10 duty steps, where 2500 ms
-  gives 25. On the 1100 W brew boiler that is about 44 W of granularity.
+  gives 25. On the brew boiler that is roughly 44 W of granularity.
 - **`ControllerConfig.h`** — new `GM_PRO_LELIT`: identical pins to `GM_PRO_REV_11` so
   `DimmedPump`, `ADSAdc` and `PressureSensor` build exactly as on a Pro, plus
   `lccRxPin` / `lccTxPin`, `boilerCount = 2`, an `lcc` flag and a `skipAlbaPort` flag.
@@ -315,19 +314,21 @@ flowchart TD
   style A fill:#8a5a00,color:#fff
 ```
 
-1. **Never both boiler SSR bits in one frame.** Non-negotiable: 1000 W + 1100 W on one
-   120 V / 15 A circuit.
-2. Temperature ceilings → safe state. 140 °C brew, 150 °C service, following
-   `open-lcc`. GaggiMate's own `MAX_SAFE_TEMP = 170.0` is too loose for the service
-   boiler.
-3. Invalid or stale 0x81, or a sensor error → safe state.
-4. **On any bail, keep transmitting the safe packet. Do not go quiet.** The Gicar boots
-   safe but **latches its last commanded state if the master stops talking**. Send the
-   safe packet as the very first thing at boot so a watchdog reset clears a latched
-   element. Hook into the existing ping-timeout and thermal-runaway paths.
-5. Do **not** copy `open-lcc`'s "solenoid open without pump" interlock unexamined —
-   FA8 is the Elizabeth's 3-way/drain and that combination is legitimate. Decide after
-   Stage 0 step 5.
+The rules themselves, and the numbers, are in
+[Interlocks worth copying](lelit-lcc-protocol.md#interlocks-worth-copying). What this
+plan adds is where they are enforced and why:
+
+1. **Enforce them at byte-assembly time inside `LccBus`**, below both `Heater`
+   instances, so no caller can bypass one. The both-boilers rule is the reason: both
+   elements share one 120 V / 15 A circuit, so it has to hold even when both PID loops
+   saturate from cold.
+2. **The ceilings belong in code, not prose.** Follow `TemperatureSensor.h`'s
+   `MAX_SAFE_TEMP = 170.0` pattern and add named constants — 170 °C is too loose for
+   the service boiler, which is why `open-lcc`'s tighter pair is worth adopting.
+3. **Never go quiet on a bail.** The Gicar latches its last commanded state, so the
+   safe packet must keep going out, and must be the very first thing sent at boot so a
+   watchdog reset clears a latched element. Hook into the existing ping-timeout and
+   thermal-runaway paths.
 
 ### What Stage 1 delivers
 
@@ -377,8 +378,8 @@ The proto schema is already multi-boiler by index, so the wire format needs noth
   state; bail → safe packet still transmitted, never silence; boot → safe packet first.
 - Power-sharing arbiter duty split and brew priority.
 
-**Simulator** — `pio run -e display-sim` covers the profile engine, UI and
-dual-boiler display with no hardware.
+**Simulator** — `pio run -e display-sim -t run` covers the profile engine, UI and
+dual-boiler display with no hardware. See [`sim/README.md`](../../sim/README.md).
 
 **On-machine**, in order, each step with the next stage's loads disconnected:
 
@@ -400,22 +401,22 @@ dual-boiler display with no hardware.
 
 ## Risks
 
-- **Mains work on a 120 V / 2100 W appliance.** Warranty void, certification void.
+- **Mains work on a live 120 V appliance.** Warranty void, certification void.
   Both elements on one circuit makes the interlock load-bearing — validate it with a
   clamp meter before leaving the machine unattended. Confirm the OPV and both safety
   thermostats (MC032 / MC521, 165 °C manual-rearm) are untouched and functional; those
   thermostats are the genuine last line of defence behind everything here.
 - **The triac becomes the pump's only switch.** See the HV section.
-- **The bit map is partly reverse-engineered.** `gicar-8.5.04-protocol/lelit-elizabeth.md`
-  is headed "(speculative)" with question marks on three of four FA lines. The
-  `4ndrey` library is the non-speculative counterpart but targets **V3**; this machine
-  is PL92T-120 REV00 (2023). Stage 0 exists to settle it.
-- **Sources disagree on FA labels.** Trust bit positions and the two code
-  implementations; distrust the prose tables.
-- **CN7 is a direct MCU GPIO**, not a shift-register drain. If it misbehaves, the
+- **The bit map is partly reverse-engineered, and the sources disagree on FA labels.**
+  See the [provenance table](lelit-lcc-protocol.md#provenance) for which source to
+  trust. The non-speculative library targets **V3**; this machine is PL92T-120 REV00
+  (2023). Stage 0 exists to settle it.
+- **CN7 is a direct MCU GPIO**, not a shift-register drain — see the
+  [CN7 caveat](lelit-lcc-protocol.md#bit-maps-elizabeth). If it misbehaves, the
   fallback is the Pro's SSR2 on GPIO47 with a second external SSR.
-- **The Pro's HV section is not published.** Only the Standard Rev 1.x board is in this
-  repo. Whether the `P` terminal is triac-only or triac plus a series relay is a
+- **The Pro's HV section is not published** — see
+  [the footnote in the evidence log](lelit-alternatives-considered.md#footnote-the-gaggimate-pro-pcb-is-not-open-hardware).
+  Whether the `P` terminal is triac-only or triac plus a series relay is a
   meter-on-the-board question.
 - **Two brains, one machine.** GaggiMate must be the *sole* master of the Gicar bus and
   of the pump. Never assert FA7. Never leave the stock LCC connected alongside.
@@ -427,24 +428,11 @@ dual-boiler display with no hardware.
 
 ## Regenerating the diagrams
 
-The `docs/diagrams/` sources are [WireViz](https://github.com/wireviz/WireViz). The
-repo commits the `.yml` source plus generated `.svg`, `.png`, `.html` and `.bom.tsv`.
-
 ```sh
-python3 -m venv /tmp/wvenv && /tmp/wvenv/bin/pip install wireviz
-/tmp/wvenv/bin/wireviz docs/diagrams/lelit-cn10-pigtail.yml
-/tmp/wvenv/bin/wireviz docs/diagrams/lelit-pro-hv-and-sensors.yml
+scripts/make_wiring_diagrams.sh docs/diagrams/lelit-cn10-pigtail.yml
+scripts/make_wiring_diagrams.sh docs/diagrams/lelit-pro-hv-and-sensors.yml
 ```
 
-Three things worth knowing, all learned the hard way:
-
-- **WireViz 0.4.1 is the newest release**, and it renders these two files and
-  `classicpro.yml` fine — but **not** `classic.yml`. That file declares `POWER_SWITCH`
-  with two pins and then wires pin 4. Pre-existing and unrelated to this work.
-- **No `<`, `>` or `->` in `notes` or `description`.** Graphviz HTML-like labels are
-  `<`-delimited, so a bare `>` truncates the label and the render fails with a syntax
-  error.
-- **No `3.0V`-style number-letter without a space.** Graphviz warns "badly delimited
-  number" and then errors.
-- A connector with no entries in `connections:` is **not drawn**, only warned about.
-  Put such facts in a `notes` field instead.
+Toolchain, the WireViz version pin, the graphviz label constraints and a known
+`classic.yml` breakage are documented in
+[`docs/diagrams/README.md`](../diagrams/README.md) — none of it is Lelit-specific.
