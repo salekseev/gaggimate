@@ -222,9 +222,24 @@ interlock has to be designed in alongside dual-boiler support, not bolted on aft
 Where the existing code already provides a mechanism, these notes use it rather than
 inventing one.
 
-**1. It lives on the controller, below both loops.** At the point heater outputs are
-applied — not in the display. A dropped BLE link must not be able to leave both elements
-energised, and the display is the least safety-critical of the three participants.
+**1. The choke point is `Heater::softPwm()`.** It is the only place a heater output is
+ever written — two `digitalWrite(heaterPin, …)` calls, one HIGH and one LOW — and it
+already carries `relayStatus` and `nextSwitchTime` state to hang an interlock on. Every
+other layer (PID, profile engine, display) is upstream of it and can be bypassed; this
+cannot. Policy may come from the display — is steam enabled, what are the setpoints —
+but **enforcement has to be entirely controller-side and correct with the link down.**
+
+Two shapes, in increasing order of structural strength:
+
+- **Shared arbiter consulted at the write.** `Heater` takes an `IDigitalOutput*` instead
+  of a raw pin (the refactor already proposed), and asks a shared `BoilerArbiter` before
+  going HIGH. The arbiter is the sole owner of the grant, so there is still one decision
+  point even though each `Heater` keeps its own 10 ms task. Smallest change that works,
+  and a beta user reports this shape running.
+- **A `BoilerGroup` owning both heaters and both outputs.** Heaters compute demand only;
+  the group applies it from one task. This is the version where "both" is genuinely
+  unrepresentable and there is unambiguously one writer, but it means `Heater` giving up
+  its own task, so it is the direction rather than the first step.
 
 **2. Make "both" unrepresentable rather than checked.** The two loops submit demand to
 one arbiter whose return type can only name a single boiler:
@@ -237,12 +252,35 @@ A runtime `if (brewOn && serviceOn)` is a guard a future caller can route around
 that cannot express "both" is not. This is the whole safety property, so it is worth
 spending the type on.
 
-**3. Time-slice, don't hard-exclude.** "Brew always wins" starves steam indefinitely.
-Allocate the existing soft-PWM window per tick: brew takes the whole window while
-brewing, and the two share when idle — `open-lcc` gives brew roughly 75 % — so the
-service boiler still recovers between shots.
+**3. Complementary switching, not slot allocation.** An earlier draft of these notes
+proposed explicitly allocating window slots between the boilers. That is more machinery
+than the problem needs. The simpler formulation, which a beta user reports working:
+**brew has priority, and steam is allowed on whenever brew is not** — subject to steam
+being enabled and its own loop asking for heat.
 
-**4. Drive anti-windup through `ctrlOutputLimits`, which already exists.**
+Sharing then falls out rather than being scheduled: brew running at 30 % duty leaves
+steam up to 70 % of the window, with no allocator and no policy constant to tune. It
+also naturally gives brew the whole window when it needs it, which is what you want
+during a shot.
+
+Why that is sufficient is worth stating: **the breaker and the wiring care about
+instantaneous current, not average power.** The invariant to hold is *at most one element
+conducting at any instant*; duty-cycle sharing is a consequence of it, not a separate
+goal.
+
+**4. Dead time on switchover is not optional.** A zero-cross SSR — the Carlo Gavazzi
+RF1A23M25 the SPX adapter uses, and most AC SSRs — does not turn off when its input goes
+low. It turns off at the **next mains zero crossing**, up to 8.3 ms away at 60 Hz and
+10 ms at 50 Hz. So dropping brew and raising steam inside the same 10 ms tick can leave
+both conducting for several milliseconds, which is precisely the overlap the interlock
+exists to prevent.
+
+Insert a switchover delay of at least one mains half-cycle, realistically 20–50 ms for
+margin. `softPwm()`'s existing `nextSwitchTime` is the natural place: it is already
+structured as a "not before this millisecond" guard, but is set to `msNow` on every
+transition, so it imposes no delay today.
+
+**5. Drive anti-windup through `ctrlOutputLimits`, which already exists.**
 `SimplePID` performs back-calculation anti-windup: it computes the output, and if it
 exceeds `ctrlOutputLimits` it subtracts the excess back out of `feedback_integralState`
 and recomputes (`SimplePID.cpp:65-79`). So the arbiter does not need new windup
@@ -261,26 +299,27 @@ Without this, the denied loop integrates a permanent error for the length of a s
 then commands 100 % the instant it is granted the window — straight at the ceiling, and
 into the safe-state oscillation that follows.
 
-**5. Guard the applied output, not the arbiter's inputs.** Mask the assembled output
+**6. Guard the applied output, not the arbiter's inputs.** Mask the assembled output
 against a forbidden-combination constant as the last statement before it is applied, and
 assert there. Testing the arbiter's decision proves the arbiter; testing the output
 proves the machine.
 
-**6. One writer.** If the output path has a shared cache or multiple writer tasks, state
+**7. One writer.** If the output path has a shared cache or multiple writer tasks, state
 the rule: the tick task is the only writer, everything else posts requests. A torn read
 during output assembly can produce a combination the arbiter never sanctioned.
 
-**7. Configurable, with a safe default.** Derive the need from element wattages and
+**8. Configurable, with a safe default.** Derive the need from element wattages and
 supply voltage, or expose an explicit alternate-only flag. A 230 V machine loses steam
 recovery for no benefit, so always-on is the wrong blanket default — but the default for
 an *unknown* machine must be to alternate. A setting that defaults to "both allowed" is
 the wrong way round.
 
-**Prerequisite.** Time-slicing assumes the soft-PWM window is independent of the PID
-output span. It is not today: `TUNER_OUTPUT_SPAN` is simultaneously the window length,
-the output ceiling and the sampling period. Decouple those first — see
+**On `TUNER_OUTPUT_SPAN`.** Complementary switching does not require shortening the
+window, so this coupling is not blocking here. It still bites if anyone later allocates
+slots explicitly or changes the window length, because `TUNER_OUTPUT_SPAN` is
+simultaneously the window length, the output ceiling and the sampling period — see
 [Stage 1 in the appendix](appendix-retained-gicar.md#stage-1--the-lcc-backend), which
-works the coupling through — or a shortened window silently caps duty.
+works that through.
 
 **Tests worth writing.** Assert on the serialized output, not the arbiter:
 
@@ -288,7 +327,9 @@ works the coupling through — or a shortened window silently caps duty.
 - Fuzzed demand and shared-state combinations → the forbidden combination never appears.
 - A loop denied for a simulated shot's duration → its integral state has not grown, and
   it does not overshoot when granted the window again.
-- Brew priority holds while brewing; sharing resumes when idle.
+- Brew priority holds while brewing; steam resumes when brew stops asking.
+- **Switchover leaves a gap.** Assert no output goes HIGH within the dead-time window of
+  another going LOW. This is the one a fast tick rate will otherwise violate silently.
 
 ### The dangerous NTC failure is the open circuit, not the short
 
