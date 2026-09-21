@@ -35,9 +35,16 @@ When a stage lands, delete what the code now carries and keep only what it canno
 
 ## Current plans
 
-| Plan | Machine | Status |
+| Document | Machine | Status |
 |---|---|---|
-| [lelit-elizabeth-gaggimate.md](lelit-elizabeth-gaggimate.md) | Lelit Elizabeth PL92T-120 | Not implemented |
+| [lelit-elizabeth-gaggimate.md](lelit-elizabeth-gaggimate.md) | Lelit Elizabeth PL92T-120 | Machine reference and bring-up notes; awaiting prototype hardware |
+| [appendix-retained-gicar.md](appendix-retained-gicar.md) | Lelit Elizabeth PL92T-120 | **Superseded.** Kept for the record |
 
-Supporting references: [lelit-lcc-protocol.md](lelit-lcc-protocol.md) (wire format),
-[lelit-alternatives-considered.md](lelit-alternatives-considered.md) (evidence log).
+Supporting references: [lelit-lcc-protocol.md](lelit-lcc-protocol.md) (stock wire
+format), [lelit-alternatives-considered.md](lelit-alternatives-considered.md) (evidence
+log from the superseded investigation).
+
+Worth noting as a worked example of the retirement rule above: the Elizabeth plan was
+superseded mid-flight when upstream took a different approach. Rather than deleting it,
+the machine facts and the constraints that bind *any* controller were kept in the live
+document and the architecture-specific reasoning moved to a clearly-marked appendix.

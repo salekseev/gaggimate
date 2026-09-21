@@ -37,8 +37,14 @@ Worth recording, because it is cheaper than opening a machine:
   or notch. Treat it as a look-at-the-connector check; see the pigtail section of
   [lelit-elizabeth-gaggimate.md](lelit-elizabeth-gaggimate.md).
 
-This document is the wire-format reference. For the build that uses it, see
-[lelit-elizabeth-gaggimate.md](lelit-elizabeth-gaggimate.md).
+This document describes the **stock electronics**. The plan that was going to drive this
+bus has been [superseded](appendix-retained-gicar.md) by a board revision that replaces
+the control board outright, so nothing here is on the current build path.
+
+It is kept because it is still the best record of what the stock hardware does — in
+particular how it reads the service boiler's capacitive level probe, which any
+replacement has to reproduce. Machine facts and controller-independent constraints live
+in [lelit-elizabeth-gaggimate.md](lelit-elizabeth-gaggimate.md).
 
 ## Provenance
 

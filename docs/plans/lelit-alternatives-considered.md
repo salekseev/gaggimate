@@ -1,9 +1,12 @@
 # Alternatives considered: pump dimming on a Lelit Elizabeth
 
-Evidence log for the architecture chosen in
-[lelit-elizabeth-gaggimate.md](lelit-elizabeth-gaggimate.md). The question was
-narrow: **how do you get GaggiMate-style variable pump power on a Lelit Elizabeth,
-and does that require replacing the Gicar power card?**
+Evidence log from the **superseded** retained-Gicar investigation — see
+[appendix-retained-gicar.md](appendix-retained-gicar.md) for why that approach was
+abandoned. The negative results below stand on their own regardless, which is why this
+is kept.
+
+The question was narrow: **how do you get GaggiMate-style variable pump power on a Lelit
+Elizabeth, and does that require replacing the Gicar power card?**
 
 Short answer: **no open-hardware espresso controller in the Lelit/variegated
 ecosystem can dim a vibration pump.** Not the LCC bus, not Open LCC, not the

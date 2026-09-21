@@ -8,6 +8,11 @@ step.
 Board *pinout* diagrams are a separate toolchain — see `scripts/pinout_diagram.py`
 and `scripts/make_pcb_preview.sh`.
 
+Note the `lelit-*` harnesses describe an approach that was
+[superseded](../plans/appendix-retained-gicar.md). They are kept as worked WireViz
+examples — a signal pigtail with an inline divider network, and a mains rewire with a
+sensor tap — not as current installation guidance.
+
 ## Regenerating
 
 ```sh
