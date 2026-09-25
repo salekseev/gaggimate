@@ -43,7 +43,7 @@ connectors:
     type: Pressure transducer
     subtype: 0-1.6 MPa, 0.5-4.5 V
     pinlabels: [+5V, SIGNAL, GND]
-    notes: Tap at the 4-way cross fitting 2200110.
+    notes: Tap at the high-pressure brass cross joint 9700001, 1/8 BSP, beside the OPV. Not the barbed 4-way cross 2200110, which is low pressure.
 
 cables:
   LINE_IN:
@@ -74,7 +74,7 @@ connections:
     - PRESSURE_PORT: [4, 3, 1]
 
 additional_bom_items:
-  - description: Tee fitting for the transducer at 4-way cross 2200110
+  - description: 1/8 BSP tee or adapter for the transducer at brass cross joint 9700001
     qty: 1
   - description: PTFE tape or sealant for the pressure tap
     qty: 1

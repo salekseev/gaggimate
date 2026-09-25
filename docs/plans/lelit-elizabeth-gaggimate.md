@@ -33,7 +33,8 @@ wiring and relays, p.7–8 boilers, p.10 hydraulics, p.15 pump):
 | SPARE KIT SILENT PUMP 120V | 4000040 | Vibration pump + damper |
 | Service boiler | 2000008 | 600 ml, **1000 W**, 120 V (PDF p.7) |
 | Brew boiler | MC752-110 | 300 ml, **1100 W**, 120 V (PDF p.8) |
-| 4WAY CROSS FITTING | 2200110 | Transducer tap point — already feeds the manometer |
+| 4WAY CROSS FITTING | 2200110 | Plastic, hose-barbed, on silicone hose — low-pressure, most likely the return manifold to the tank. **Not a pressure tap** |
+| CROSS JOINT M/F/F/F 1/8 | 9700001 | Brass, 1/8 BSP, beside the OPV and the Ø5 PTFE push-fits — the pump-outlet tee and the **transducer tap point** |
 | Manometer | 3700006/32/34 | Mechanical gauge only; no electronic pressure sensor |
 | OPV | MC931 | Adjustable; sets brew pressure today |
 | **Machine nameplate** | — | **1400 W, 15 A** at 120 V — *below the element sum*, so the stock controller alternates them |
@@ -155,7 +156,7 @@ Worth knowing, with the Elizabeth differences called out:
 | Tank level | vacuum switch, N.O., into the expander | Elizabeth uses a **reed float** (9600009) plus a tank-present microswitch |
 | Steam boiler level | **GRL8-02 outboard AC controller** — see above | same probe class; same gap |
 | Pump / valve | GaggiMate `P` and `V` outputs via a 7-pole Phoenix AC terminal | same |
-| Pressure | transducer at the brew pump outlet | Elizabeth: tap the 4-way cross, part 2200110 |
+| Pressure | transducer at the brew pump outlet | Elizabeth: tap the high-pressure brass cross, part 9700001 |
 | I²C + power | taken off the **expansion connector** (5 V, GND, SDA, SCL) | same — but see the pin-position caveat in `pcb/expansion-template/README.md` |
 
 Two things the adapter's author already wants improved, which are therefore easy asks
@@ -370,8 +371,15 @@ it arrives.
 
 ## Hydraulics
 
-- **Pressure tap:** the **4-way cross fitting, part 2200110** already feeds the
-  mechanical manometer and is the natural transducer point. Needs a tee and PTFE.
+- **Pressure tap:** the **brass cross joint 9700001** (M/F/F/F, 1/8 BSP) is the
+  high-pressure node — it sits beside the OPV (MC931) and the Ø5 PTFE push-fits (MC073,
+  MC117), i.e. the pump-outlet tee. Needs a 1/8 BSP tee or adapter. **Not** the 4-way
+  cross 2200110: page 10 draws that as a plastic cross with hose barbs on silicone hose
+  (MC101 6×9, MC043 4×8), which is low-pressure only, so it is almost certainly the return
+  manifold and a transducer there would read about 0 bar. The fitting *types* establish
+  which side is high pressure; the exact hose routing is inferred from an exploded view
+  that shows parts rather than connections, so **confirm on the machine before teeing
+  in**.
 - **OPV:** MC931 is adjustable and currently sets brew pressure. Back it off to roughly
   11–12 bar once closed-loop pressure control is in play, or it clamps the profile.
 - **Leave alone:** the 5.5 bar safety valve (9700043), the anti-vacuum valve (9700052)

@@ -48,7 +48,7 @@ Still useful on its own terms:
 
 ## Corrections carried forward
 
-Two things the text below gets wrong. Noted here rather than edited in place, so the
+Three things the text below gets wrong. Noted here rather than edited in place, so the
 appendix stays a faithful record.
 
 **`BoilerFillPlugin` is not level-based autofill.** The text below calls it the natural
@@ -62,7 +62,13 @@ Faston blade, an insulating collar and a plain 85 mm rod, so the boiler shell is
 return electrode. This matters because a conductive front end is far simpler — AC
 excitation and an ADC channel, no capacitance-to-digital part.
 
-The live document states both correctly.
+**The transducer tap point is not the 4-way cross 2200110.** The text below says to tap
+the pressure transducer there, "which already feeds the manometer". Page 10 draws 2200110
+as a plastic cross with hose barbs on silicone hose, which is low-pressure only — most
+likely the return manifold. The high-pressure node is the brass cross joint 9700001
+(1/8 BSP) beside the OPV, at the pump outlet.
+
+The live document states all three correctly.
 
 ---
 
