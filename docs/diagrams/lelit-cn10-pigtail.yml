@@ -1,0 +1,70 @@
+metadata:
+  title: Lelit Elizabeth - CN10 signal pigtail
+  description: Gicar 9.3.01.30G00 power card 9600077 to GaggiMate Pro Rev 1.1 UART port J4
+
+  template:
+    name: din-6771
+    sheetsize: A3
+
+  templates:
+    - &jstxh
+      type: JST XHP-4 housing
+      subtype: female
+    - &sig
+      gauge: 26 AWG
+
+connectors:
+  CN10:
+    type: TE AMPMODU Mod II 280360
+    subtype: female receptacle, 6 pos
+    pinlabels: [+12V, TX_TO_GICAR, RX_FROM_GICAR, GND, 3V3_OLED, 3V3_MCU]
+    notes: Polarization comes from the header, not this housing - check whether CN10 is shrouded. If it is a bare pin header, mark pin 1 and continuity-check before the first plug-in. Pins 1, 5, 6 unpopulated.
+
+  DIVIDER:
+    type: Divider network
+    subtype: R1/R2/R3 in heatshrink
+    pinlabels: [TX_GICAR, RX_GICAR, TX_BOARD, RX_BOARD, GND]
+    ignore_in_bom: true
+    notes: Board end. R3 series on TX. R1/R2 divider on RX. Values in the BOM below.
+
+  J4:
+    <<: *jstxh
+    pinlabels: [+5V, TX_GPIO43, RX_GPIO44, GND]
+    notes: GaggiMate Pro Rev 1.1 UART port. +5V left unconnected.
+
+cables:
+  GICAR_SIDE:
+    <<: *sig
+    colors: [WH, GN, BK]
+    length: 0.3
+  BOARD_SIDE:
+    <<: *sig
+    colors: [WH, GN, BK]
+    length: 0.05
+
+connections:
+  -
+    - CN10: [2, 3, 4]
+    - GICAR_SIDE: [1, 2, 3]
+    - DIVIDER: [1, 2, 5]
+  -
+    - DIVIDER: [3, 4, 5]
+    - BOARD_SIDE: [1, 2, 3]
+    - J4: [2, 3, 4]
+
+additional_bom_items:
+  - description: Socket contact for CN10, TE 182206-2, 22-26 AWG crimp tin (3 used, buy spares)
+    qty: 6
+  - description: Crimp contact for J4, JST SXH-001T-P0.6 (3 used, buy spares)
+    qty: 5
+  - description: Resistor, 220R, 1/4W - TX series
+    designators: [R3]
+    qty: 1
+  - description: Resistor, 1k, 1/4W - RX divider upper
+    designators: [R1]
+    qty: 1
+  - description: Resistor, 1.5k, 1/4W - RX divider lower
+    designators: [R2]
+    qty: 1
+  - description: Heatshrink, 6mm, over the divider network
+    qty: 1

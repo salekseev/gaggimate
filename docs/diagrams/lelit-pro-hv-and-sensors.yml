@@ -1,0 +1,80 @@
+metadata:
+  title: Lelit Elizabeth - GaggiMate Pro HV rewire and pressure tap
+  description: Pump moved from Gicar FA7 to the Pro dimmed P terminal. Transducer on the Pro pressure port.
+
+  template:
+    name: din-6771
+    sheetsize: A3
+
+  templates:
+    - &spade
+      type: 6.35mm Spade
+      subtype: female
+    - &hv
+      gauge: 18 AWG
+    - &lv
+      gauge: 22 AWG
+
+connectors:
+  MACHINE_MAINS:
+    type: Existing machine wiring
+    ignore_in_bom: true
+    pinlabels: [L, N]
+    notes: Permanent mains, downstream of the main switch but upstream of Gicar FA7. Must not come off a switched contact.
+
+  BOARD_HV_PRO:
+    type: Terminal block, on-board
+    ignore_in_bom: true
+    pinlabels: [P, V, N, L]
+    notes: DANGER HV. Pro Rev 1.1. P is the dimmed triac output. V unused here. Differs from BOARD_HV on the Standard board.
+
+  PUMP:
+    <<: *spade
+    pinlabels: [L, N]
+    notes: Lelit 4000040, 120 V. N is the thermal-fuse leg - leave it alone.
+
+  PRESSURE_PORT:
+    type: Terminal block, on-board
+    ignore_in_bom: true
+    pinlabels: [GND, X, ANALOG_IN, +5V]
+    notes: Feeds the onboard ADS1115. X unused.
+
+  TRANSDUCER:
+    type: Pressure transducer
+    subtype: 0-1.6 MPa, 0.5-4.5 V
+    pinlabels: [+5V, SIGNAL, GND]
+    notes: Tap at the high-pressure brass cross joint 9700001, 1/8 BSP, beside the OPV. Not the barbed 4-way cross 2200110, which is low pressure.
+
+cables:
+  LINE_IN:
+    <<: *hv
+    colors: [BN, BU]
+    length: 0.3
+  PUMP_CABLE:
+    <<: *hv
+    colors: [BN, BU]
+    length: 0.25
+  SENSOR:
+    <<: *lv
+    colors: [RD, YE, BK]
+    length: 0.4
+
+connections:
+  -
+    - MACHINE_MAINS: [1, 2]
+    - LINE_IN: [1, 2]
+    - BOARD_HV_PRO: [4, 3]
+  -
+    - BOARD_HV_PRO: [1, 3]
+    - PUMP_CABLE: [1, 2]
+    - PUMP: [1, 2]
+  -
+    - TRANSDUCER: [1, 2, 3]
+    - SENSOR: [1, 2, 3]
+    - PRESSURE_PORT: [4, 3, 1]
+
+additional_bom_items:
+  - description: 1/8 BSP tee or adapter for the transducer at brass cross joint 9700001
+    qty: 1
+  - description: PTFE tape or sealant for the pressure tap
+    qty: 1

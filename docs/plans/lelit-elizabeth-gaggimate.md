@@ -1,0 +1,449 @@
+# Lelit Elizabeth PL92T — machine reference and bring-up notes
+
+**Status:** reference. No firmware written. Waiting on a prototype of the GaggiMate
+board revision that replaces the Gicar, at which point the open questions at the bottom
+get answered from the hardware.
+
+## Context
+
+This started as a plan to keep the Lelit control board and replace only the LCC display
+board. That approach is **superseded** — the maintainer is producing a full board
+revision that replaces the Gicar outright and carries every connection it has, and
+people buy the board matched to their machine rather than retrofitting. The reasoning
+and the harness work are preserved in
+[appendix-retained-gicar.md](appendix-retained-gicar.md).
+
+What is left here is the part that was never about the Gicar: **what this machine is,
+what constrains any controller driving it, and how to bring one up without damaging it
+or yourself.** All of it applies to the replacement board.
+
+## The machine
+
+From `TECH_5200016EC_PL92T-120_REV00_PartDiagram.pdf` (p.3 control electronics, p.6
+wiring and relays, p.7–8 boilers, p.10 hydraulics, p.15 pump):
+
+| Part | Code | Role |
+|---|---|---|
+| POWER CARD PL92T 100-240Vac | 9600077 | Gicar **9.3.01.30G00** — mains switching + sensor front end. Potted module; HV on Faston tabs |
+| DISPLAY LCC DUALBOILER | 9600148 | The brain: UI, PID, pre-infusion logic |
+| FLAT CABLE DISPLAY LCC 6WAYS | 9600042 | The only link between them (CN10, 400 mm) |
+| TEMPERATURE PROBE ×2 | 9600092 | 50 kΩ NTC, one per boiler |
+| LEVEL PROBE 85MM | 9600105L1 | Capacitive, service boiler |
+| SENSOR FOR GAUGE 59025-1-T-02-A | 9600009 | Hamlin reed float — tank level |
+| SPARE KIT SILENT PUMP 120V | 4000040 | Vibration pump + damper |
+| Service boiler | 2000008 | 600 ml, **1000 W**, 120 V (PDF p.7) |
+| Brew boiler | MC752-110 | 300 ml, **1100 W**, 120 V (PDF p.8) |
+| 4WAY CROSS FITTING | 2200110 | Plastic, hose-barbed, on silicone hose — low-pressure, most likely the return manifold to the tank. **Not a pressure tap** |
+| CROSS JOINT M/F/F/F 1/8 | 9700001 | Brass, 1/8 BSP, beside the OPV and the Ø5 PTFE push-fits — the pump-outlet tee and the **transducer tap point** |
+| Manometer | 3700006/32/34 | Mechanical gauge only; no electronic pressure sensor |
+| OPV | MC931 | Adjustable; sets brew pressure today |
+| **Machine nameplate** | — | **1400 W, 15 A** at 120 V — *below the element sum*, so the stock controller alternates them |
+| Safety thermostats | MC032 / MC521 | 165 °C manual-rearm. **Leave these alone.** |
+| Safety valve | 9700043 | 5.5 bar, service boiler. **Leave alone.** |
+| Anti-vacuum valve | 9700052 | Service boiler. **Leave alone.** |
+
+The brew/service attribution comes from which fittings share each page: p.7 carries the
+5.5 bar safety valve, the anti-vacuum valve and the 85 mm level probe (service-boiler
+parts), p.8 the brass diffuser, LELIT58 group gasket and boiler upper-part kit (the brew
+group). It is consistent with CN9 driving brew and CN7 service across all three docs.
+**Confirm it against your own machine before wiring** — published Elizabeth specs are
+often quoted with a larger service boiler than 600 ml, and retailer listings give the
+brew element as 1200 W where the parts diagram says 1100 W. The interlock argument below
+rests on the element sum exceeding the nameplate, which holds either way.
+
+No flowmeter anywhere. **Both elements together exceed a 120 V / 15 A branch circuit, so
+they can never run at once.** That is why the interlock below is a safety requirement,
+not a nicety.
+
+## Sensors, and what reads them today
+
+| Sensor | Part | Interface | GaggiMate support today |
+|---|---|---|---|
+| Brew boiler temp | 9600092 | 50 kΩ NTC | Needs an NTC path; the Pro's stock temp input is K-type via MAX31855. `NtcThermistor` exists but is **never instantiated** and expects a 100 kΩ/B3950 NTC in a 10 kΩ divider read through an ADS ADC channel |
+| Service boiler temp | 9600092 | 50 kΩ NTC | same |
+| Service boiler level | 9600105L1, 85 mm | **conductive**, single electrode, boiler shell as return. Point-level, not continuous | **none — see below** |
+| Tank level | 9600009 | Hamlin 59025 reed float | No reed input. GaggiMate's water level is optical: `TofMeasurement { distance }` from a VL53L0X, gated on `capabilities.tof` |
+| Tank present | 9600010 | micro switch | none |
+| Brew pressure | — | mechanical manometer only | Add a 0–1.6 MPa / 0.5–4.5 V transducer; the Pro reads it on an analog terminal block into an onboard ADS1115 |
+
+### Level sensing is the real gap, and it is not just firmware
+
+**First, the probe is conductive, not capacitive.** The `gicar-8.5.04-protocol` docs
+call CN1 "capacitive" and this document repeated that. The parts diagram settles it —
+p.7 draws 9600105L1 as:
+
+- **a single flat Faston blade terminal**, in the same style as the MC521 thermostat
+  tabs alongside it. One blade is one electrode, so the return must be the boiler shell.
+  Contrast the 9600092 temperature probe on the same page, which exits as a *cable*;
+- **an insulating collar** between the mounting hex and the rod, isolating the electrode
+  from the boiler body — exactly what a rod-versus-shell measurement needs;
+- **a plain 85 mm rod with a stepped tip** — the classic autofill electrode geometry.
+
+A capacitive probe would need a shield or reference, which a single spade tab cannot
+provide. This also matches the Silvia Pro X, whose probe the SPX BOM describes
+explicitly as "Conductive Liquid Level sensor, 2 wire, probe + boiler ground".
+
+Product photographs of the part confirm the construction: one flat spade terminal, an
+insulating washer, a brass clamp nut, a stainless hex, a **large white PTFE/ceramic
+insulator body**, the stainless mounting hex, then a **PTFE sleeve over the upper rod**
+and a bare stainless rod with a stepped tip.
+
+**That sleeve is the important detail.** Only the rod's lower exposed portion contacts
+water, and that masking is what sets the trip point. So this is a **point-level
+(threshold) sensor, not a continuous level gauge** — the Gicar's analog value is reading
+the presence or absence of a conductive path, with the magnitude reflecting the water's
+resistance, rather than a fill height. Autofill is therefore a threshold with
+hysteresis, which is what the Bianca firmware's `> 256` comparison amounts to. Do not
+try to interpret the value as a percentage full.
+
+**That makes the front end much simpler than capacitive.** No FDC1004 or
+capacitance-to-digital part: AC excitation into a known resistance and one ADC channel
+is enough, with the AC drive there to avoid electrolysis and electrode plating. So
+replacing the SPX design's bulky DIN-mount level controller with something on-board is a
+small circuit, which is plausibly what its author had in mind.
+
+**Second, the reference adapter does not sense level electronically at all.** The SPX
+Adapter Board BOM — the design the new GaggiMate board is reportedly based on —
+delegates it entirely to a **GRL8-02 standalone AC liquid level controller**, a DIN-mount
+module that reads the probe and switches the steam pump directly. GaggiMate never sees
+the level; the AC wiring just routes `Steam Pump` to the controller's output contact.
+
+The adapter's author flags this as the weak point themselves: the GRL8-02 is *"the
+largest and most expensive part of this kit and would be a great thing to optimize or at
+least find one in a small format"*. So a proper front end plus firmware support is
+already something that design wants, not a new ask.
+
+### The firmware side of the same gap
+
+Searched the firmware: there is **no capacitive or conductive level sensing anywhere**.
+No FDC1004, no capacitive driver, no conductivity driver. The only "conductivity" in the
+tree is `PressureController`'s *puck* conductance, which is a hydraulic metaphor and
+unrelated.
+
+Two further things that are easy to assume wrongly:
+
+- **`BoilerFillPlugin` is open-loop timers, not level sensing.** It runs
+  `PumpProcess(getStartupFillTime())` when the controller becomes ready and
+  `PumpProcess(getSteamFillTime())` on leaving steam mode. It never reads a level.
+- **The protocol has no level field.** `gaggimate.proto` carries `TofMeasurement
+  { distance }` and nothing else level-related.
+
+So service-boiler autofill needs four things that do not exist: an analog front end, a
+driver, a proto field, and the control logic. The proto field is the cheap one to get
+agreed **before** the board is finalised.
+
+For what the stock electronics do with this probe — a 3-byte value, roughly 128 when
+full and 600+ when low — see [lelit-lcc-protocol.md](lelit-lcc-protocol.md). That is the
+behaviour a replacement has to reproduce.
+
+## Reference design: the SPX Adapter Board
+
+The new GaggiMate board is reportedly based on the **Silvia Pro X adapter board**, so
+its BOM is the best available preview of what to expect.
+
+Source: [SPX Adapter Board BOM](https://docs.google.com/spreadsheets/d/e/2PACX-1vSxFmOAwAkJ8xUGDV4FLHnhvBW5Qs9sc04x0-XNw-c60mpDzi-Gj8OuUcMsflu3L3f23BXiXErgrmJc/pubhtml)
+(published sheet). It covers interface connectors, the Lego-build component list, the
+Gicar-side signal layout for both DC and AC, the GaggiMate-side connections, and
+installation notes including removal and what to add.
+
+Worth knowing, with the Elizabeth differences called out:
+
+| Function | SPX adapter | Elizabeth difference |
+|---|---|---|
+| Boiler temps | 10 kΩ B3950 NTC → 1 kΩ divider at 3.3 V → **ADS1115** channel | **50 kΩ β≈4018**. Same topology, different divider values, and `NtcThermistor`'s constants are hardcoded for neither |
+| Heaters | 2× **Carlo Gavazzi RF1A23M25**, 9–18 VDC control, sunk by a **ULN2003AN** off a DC-DC boost to 12 V | Same need — two SSRs. Note these are 12 V-control, not the 3.3 V-logic SSR drive on a Standard board |
+| Digital I/O | **PCF8575** I²C expander for tank level in and panel LED out | Elizabeth has three buttons, three button LEDs and a manometer lamp — more I/O, same approach |
+| Tank level | vacuum switch, N.O., into the expander | Elizabeth uses a **reed float** (9600009) plus a tank-present microswitch |
+| Steam boiler level | **GRL8-02 outboard AC controller** — see above | same probe class; same gap |
+| Pump / valve | GaggiMate `P` and `V` outputs via a 7-pole Phoenix AC terminal | same |
+| Pressure | transducer at the brew pump outlet | Elizabeth: tap the high-pressure brass cross, part 9700001 |
+| I²C + power | taken off the **expansion connector** (5 V, GND, SDA, SCL) | same — but see the pin-position caveat in `pcb/expansion-template/README.md` |
+
+Two things the adapter's author already wants improved, which are therefore easy asks
+rather than new ones: replacing the bulky DIN-mount level controller, and moving the
+switches and SSR control onto the I²C expander.
+
+## Constraints that bind any controller
+
+These follow from the machine, not from any particular board.
+
+### Both elements can never run together — the machine is rated on that assumption
+
+This is the single most important constraint on this machine, and it is stronger than
+"you might trip a breaker".
+
+| | Elements | Machine nameplate |
+|---|---|---|
+| Elizabeth PL92T-120 | 1000 W steam + 1100–1200 W brew | **1400 W**, 15 A |
+| Silvia Pro X, 120 V | 850 W steam + brew | ~1000 W |
+
+(The parts diagram gives the brew element as 1100 W; retailer specifications say 1200 W.
+Either way the point holds.)
+
+The element sum is roughly **2200 W**, far above the **1400 W** nameplate. That is only
+arithmetically possible if **the stock controller never runs both elements at full
+simultaneously** — so Lelit already alternates them, and the same pattern appears on the
+Silvia Pro X, whose 120 V nameplate is below its steam element plus anything. The
+appliance is rated, listed and certified on that assumption.
+
+So running both concurrently is not merely a nuisance trip. 2200 W at 120 V is
+**18.3 A — 122 % of a 15 A circuit**, and a UL 489 breaker is not required to trip
+promptly at 1.22×; it may carry that for an hour or longer. Meanwhile the 165 °C
+thermostats are **per-boiler thermal** cutouts, and with both boilers at their normal
+temperatures neither opens. The parts actually overloaded are the machine's cord, main
+switch and internal loom — none of which were sized for it, because the manufacturer
+never intended both elements to be on at once.
+
+**There is no electrical backstop. The interlock is the only protection.**
+
+> ⚠️ **At 230 V this problem does not exist.** 2200 W is 9.6 A, comfortably inside a
+> 16 A circuit. So dual-boiler firmware developed and tested on 230 V hardware can run
+> both elements concurrently, behave perfectly on the bench, and exceed the nameplate on
+> every 120 V machine. Anyone implementing dual-boiler support needs to know that the
+> interlock is a **120 V-market requirement that their own bench may not reveal.**
+
+### Firmware state today: the interlock does not exist, and neither does dual boiler
+
+Checked against the tree, because this is worth knowing precisely rather than assuming:
+
+- **One `Heater` instance only** — `GaggiMateController.cpp` constructs a single
+  `Heater` and holds one `Heater *heater`. There is no second boiler controller.
+- **`ALT_RELAY_STEAM_BOILER` is a dead constant.** It is defined in
+  `src/display/core/constants.h` and referenced nowhere else; `Controller.cpp` and
+  `DefaultUI.cpp` only ever test `ALT_RELAY_GRIND`. Selecting it would drive nothing,
+  and the option is `disabled` in `MachineTab.jsx` regardless.
+- **No power arbitration anywhere.** No interlock, no total-power or current limit, no
+  mutual exclusion between outputs.
+
+So there is nothing broken to fix — the feature is absent. The consequence is that **the
+interlock has to be designed in alongside dual-boiler support, not bolted on after.**
+
+### Interlock design notes
+
+Where the existing code already provides a mechanism, these notes use it rather than
+inventing one.
+
+**1. The choke point is `Heater::softPwm()`.** It is the only place a heater output is
+ever written — two `digitalWrite(heaterPin, …)` calls, one HIGH and one LOW — and it
+already carries `relayStatus` and `nextSwitchTime` state to hang an interlock on. Every
+other layer (PID, profile engine, display) is upstream of it and can be bypassed; this
+cannot. Policy may come from the display — is steam enabled, what are the setpoints —
+but **enforcement has to be entirely controller-side and correct with the link down.**
+
+Two shapes, in increasing order of structural strength:
+
+- **Shared arbiter consulted at the write.** `Heater` takes an `IDigitalOutput*` instead
+  of a raw pin (the refactor already proposed), and asks a shared `BoilerArbiter` before
+  going HIGH. The arbiter is the sole owner of the grant, so there is still one decision
+  point even though each `Heater` keeps its own 10 ms task. Smallest change that works,
+  and a beta user reports this shape running.
+- **A `BoilerGroup` owning both heaters and both outputs.** Heaters compute demand only;
+  the group applies it from one task. This is the version where "both" is genuinely
+  unrepresentable and there is unambiguously one writer, but it means `Heater` giving up
+  its own task, so it is the direction rather than the first step.
+
+**2. Make "both" unrepresentable rather than checked.** The two loops submit demand to
+one arbiter whose return type can only name a single boiler:
+
+```cpp
+enum class ActiveBoiler : uint8_t { None, Brew, Service };
+```
+
+A runtime `if (brewOn && serviceOn)` is a guard a future caller can route around; a type
+that cannot express "both" is not. This is the whole safety property, so it is worth
+spending the type on.
+
+**3. Complementary switching, not slot allocation.** An earlier draft of these notes
+proposed explicitly allocating window slots between the boilers. That is more machinery
+than the problem needs. The simpler formulation, which a beta user reports working:
+**brew has priority, and steam is allowed on whenever brew is not** — subject to steam
+being enabled and its own loop asking for heat.
+
+Sharing then falls out rather than being scheduled: brew running at 30 % duty leaves
+steam up to 70 % of the window, with no allocator and no policy constant to tune. It
+also naturally gives brew the whole window when it needs it, which is what you want
+during a shot.
+
+Why that is sufficient is worth stating: **the breaker and the wiring care about
+instantaneous current, not average power.** The invariant to hold is *at most one element
+conducting at any instant*; duty-cycle sharing is a consequence of it, not a separate
+goal.
+
+**4. Dead time on switchover is not optional.** A zero-cross SSR — the Carlo Gavazzi
+RF1A23M25 the SPX adapter uses, and most AC SSRs — does not turn off when its input goes
+low. It turns off at the **next mains zero crossing**, up to 8.3 ms away at 60 Hz and
+10 ms at 50 Hz. So dropping brew and raising steam inside the same 10 ms tick can leave
+both conducting for several milliseconds, which is precisely the overlap the interlock
+exists to prevent.
+
+Insert a switchover delay of at least one mains half-cycle, realistically 20–50 ms for
+margin. `softPwm()`'s existing `nextSwitchTime` is the natural place: it is already
+structured as a "not before this millisecond" guard, but is set to `msNow` on every
+transition, so it imposes no delay today.
+
+**5. Drive anti-windup through `ctrlOutputLimits`, which already exists.**
+`SimplePID` performs back-calculation anti-windup: it computes the output, and if it
+exceeds `ctrlOutputLimits` it subtracts the excess back out of `feedback_integralState`
+and recomputes (`SimplePID.cpp:65-79`). So the arbiter does not need new windup
+machinery — each tick it tells the limited loop what it is actually allowed:
+
+```cpp
+// share is the fraction of the window this boiler was granted, 0.0 .. 1.0
+pid->setCtrlOutputLimits(0.0f, share * TUNER_OUTPUT_SPAN);
+```
+
+`Heater` currently calls this once at setup with the full span; make it dynamic. **Do
+not** use `reset()` or `resetFeedbackController()` for this — they discard loop state,
+so the boiler re-learns from scratch every time it is denied. Clamping preserves it.
+
+Without this, the denied loop integrates a permanent error for the length of a shot and
+then commands 100 % the instant it is granted the window — straight at the ceiling, and
+into the safe-state oscillation that follows.
+
+**6. Guard the applied output, not the arbiter's inputs.** Mask the assembled output
+against a forbidden-combination constant as the last statement before it is applied, and
+assert there. Testing the arbiter's decision proves the arbiter; testing the output
+proves the machine.
+
+**7. One writer.** If the output path has a shared cache or multiple writer tasks, state
+the rule: the tick task is the only writer, everything else posts requests. A torn read
+during output assembly can produce a combination the arbiter never sanctioned.
+
+**8. Configurable, with a safe default.** Derive the need from element wattages and
+supply voltage, or expose an explicit alternate-only flag. A 230 V machine loses steam
+recovery for no benefit, so always-on is the wrong blanket default — but the default for
+an *unknown* machine must be to alternate. A setting that defaults to "both allowed" is
+the wrong way round.
+
+**On `TUNER_OUTPUT_SPAN`.** Complementary switching does not require shortening the
+window, so this coupling is not blocking here. It still bites if anyone later allocates
+slots explicitly or changes the window length, because `TUNER_OUTPUT_SPAN` is
+simultaneously the window length, the output ceiling and the sampling period — see
+[Stage 1 in the appendix](appendix-retained-gicar.md#stage-1--the-lcc-backend), which
+works that through.
+
+**Tests worth writing.** Assert on the serialized output, not the arbiter:
+
+- Both boilers demanding 100 % → at most one active in every emitted output.
+- Fuzzed demand and shared-state combinations → the forbidden combination never appears.
+- A loop denied for a simulated shot's duration → its integral state has not grown, and
+  it does not overshoot when granted the window again.
+- Brew priority holds while brewing; steam resumes when brew stops asking.
+- **Switchover leaves a gap.** Assert no output goes HIGH within the dead-time window of
+  another going LOW. This is the one a fast tick rate will otherwise violate silently.
+
+### The dangerous NTC failure is the open circuit, not the short
+
+A **short** reads low resistance, i.e. hot, hits any upper limit and fails safe. An
+**open** circuit reads as cold forever, so duty pins high and an upper limit never
+trips. A ceiling alone cannot see this. Also covered by nothing: a stuck-but-plausible
+reading, which arrives fresh and passes every freshness check while the PID commands
+100 % indefinitely.
+
+What actually catches these:
+
+- A **lower** bound, not just an upper one.
+- A rate-of-rise check — commanded duty above ~50 % for 30 s must produce ≥ 2 °C.
+- Identical raw readings for N consecutive samples on a boiler that is actively heating
+  is a fault; ADC noise guarantees the low bit moves.
+- A physical-plausibility rate limit: a boiler cannot move more than a fraction of a °C
+  in 100 ms.
+- **Probe swap.** Both NTCs are the same part (9600092) and nothing forces orientation.
+  Swapped, the brew loop regulates the brew element from the service boiler's
+  temperature, and the two plausible ceilings are close enough that neither trips
+  promptly. Heat exactly one boiler during bring-up and confirm the expected channel
+  moves.
+
+### Blast radius needs deciding, not defaulting
+
+"Either boiler over its ceiling → whole machine safe" means one failed service NTC
+disables the brew boiler too. That may be right, but it should be a stated decision with
+a recovery path, or users will bypass it.
+
+### A controller that is not co-powered with its I/O has a boot window
+
+If the controller can reset while whatever holds the outputs keeps power, the outputs
+hold their last state across the reset. On a cold power-up this is harmless, because
+both sides lose power together. **Only a controller-only reset is dangerous** —
+watchdog, brownout, USB replug, OTA. Whether this applies to the replacement board
+depends on whether its output stage is on the same rail as its MCU; worth checking once
+it arrives.
+
+## Hydraulics
+
+- **Pressure tap:** the **brass cross joint 9700001** (M/F/F/F, 1/8 BSP) is the
+  high-pressure node — it sits beside the OPV (MC931) and the Ø5 PTFE push-fits (MC073,
+  MC117), i.e. the pump-outlet tee. Needs a 1/8 BSP tee or adapter. **Not** the 4-way
+  cross 2200110: page 10 draws that as a plastic cross with hose barbs on silicone hose
+  (MC101 6×9, MC043 4×8), which is low-pressure only, so it is almost certainly the return
+  manifold and a transducer there would read about 0 bar. The fitting *types* establish
+  which side is high pressure; the exact hose routing is inferred from an exploded view
+  that shows parts rather than connections, so **confirm on the machine before teeing
+  in**.
+- **OPV:** MC931 is adjustable and currently sets brew pressure. Back it off to roughly
+  11–12 bar once closed-loop pressure control is in play, or it clamps the profile.
+- **Leave alone:** the 5.5 bar safety valve (9700043), the anti-vacuum valve (9700052)
+  and both 165 °C manual-rearm thermostats (MC032 / MC521). Behind everything above,
+  those are the last line.
+
+## Bring-up ladder
+
+Each step with the next step's loads physically disconnected. This ordering is the
+single procedure — do not run a second one in parallel.
+
+1. **Sensors only.** Both elements and the pump disconnected. Confirm both temperature
+   channels read plausibly and track a reference thermometer, and that heating exactly
+   one boiler moves the expected channel (probe-swap check).
+2. **Low-voltage outputs only** — panel LEDs, manometer lamp. Confirms the output path
+   with nothing dangerous energised.
+3. **Solenoids**, water in tank, elements still disconnected. Confirm which output does
+   what hydraulically rather than trusting a label.
+4. **Pump**, no elements, blank basket. Confirm smooth modulation and that the
+   transducer reads plausible bar against the mechanical manometer.
+5. **One element at a time, the other disconnected.** PID settles; autotune runs.
+   **Record steady-state stability** in °C peak-to-peak at the brew setpoint over 10
+   minutes and again during a shot — it is the number that tells you whether the control
+   path is good enough.
+6. **Both elements connected.** Clamp-meter the supply and confirm total draw never
+   shows both on, including with both loops saturated from cold. This is the step that
+   validates the only protection the machine has.
+7. **Full shot.** Pressure profile tracked, shot graph recorded, BLE scale stops on
+   weight. Run the flow calibration.
+8. **Fault injection.** Interrupt the link between controller and output stage mid-shot;
+   confirm the machine ends up safe, **including that the pump stops**, and recovers.
+9. **Warm reset, not a power cycle.** With a boiler commanded on, reset the controller
+   alone while the output stage keeps power, and clamp-meter how long the element stays
+   energised. A power cycle does not test this — it drops both sides.
+10. **Restore stock** and confirm the machine still runs unmodified.
+
+## Open questions for the prototype
+
+1. **Level sensing** — is there any front end, or is the expectation an outboard
+   controller as in the SPX adapter? The probe is conductive (established above), so
+   what is needed is AC excitation plus an ADC channel, not a capacitive part.
+2. **Temperature front end** — the SPX adapter reads 10 kΩ/B3950 NTCs through a 1 kΩ
+   divider at 3.3 V into an ADS1115, which is exactly the path `NtcThermistor` expects.
+   But its constants are file-scope `constexpr` (`Rs=10000, Vs=5.0, Beta=3950,
+   Ro=100000`), so they match neither the SPX divider nor the Elizabeth's **50 kΩ
+   β≈4018** probes. Parameterising them per board is small and now demonstrably needed
+   by two machines.
+3. **Tank level** — reed float input, or is the expectation a ToF retrofit?
+4. **Pump output** — is there a dimmer, and is it PSM like the Pro's?
+5. **Pressure input** — analog terminal block as on the Pro?
+6. **Output stage power domain** — same rail as the MCU, or can it hold state across a
+   controller reset? Decides whether the boot window above applies.
+7. **Connector pinouts** — the Molex Micro-Fit 3.0 2×12 and Hirose DF63 6P maps, for
+   documenting the install.
+8. **Does the dual-boiler firmware alternate the elements?** Not a hardware question, but
+   the one with the highest consequence, and the reason to ask early: at 230 V both
+   elements fit on one circuit, so a 230 V bench will not reveal a missing interlock. See
+   the constraint section above.
+
+## Related documents
+
+- [appendix-retained-gicar.md](appendix-retained-gicar.md) — the superseded approach and
+  why it was abandoned.
+- [lelit-lcc-protocol.md](lelit-lcc-protocol.md) — stock LCC↔control-board wire format.
+  Still the best record of what the stock electronics do, including the level probe.
+- [lelit-alternatives-considered.md](lelit-alternatives-considered.md) — why the stock
+  bus cannot carry pump power, and why other open-hardware controllers were rejected.
